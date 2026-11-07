@@ -1,0 +1,29 @@
+{
+  "name": "welfare-check-agents",
+  "version": "0.1.0",
+  "description": "Agents worker for Welfare Check",
+  "scripts": {
+    "dev": "tsx worker.ts",
+    "start": "tsx worker.ts",
+    "sample": "tsx sample.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^3.0.0",
+    "dotenv": "^18.0.9",
+    "openai": "^7.53.0",
+    "spacetimedb": "^2.14.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "private": true,
+  "type": "module"
+}

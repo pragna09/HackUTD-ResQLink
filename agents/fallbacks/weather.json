@@ -1,0 +1,23 @@
+{
+  "_comment": "Stored fallback results for the Weather Research agent. Used when no model is available or the model returns invalid JSON twice. Always written with source = \"fallback\". Hand-written for the SYNTHETIC demo zone; not model output.",
+  "trinity-bottoms": {
+    "hazard": "flood",
+    "severity": 4,
+    "confidence": 0.6,
+    "summary": "Synthetic reports describe street flooding, closed low-water crossings and a river gauge forecast above flood stage in the Trinity Bottoms zone. Power and cell service are degraded, so silent phones are expected and need welfare checks.",
+    "evidence": [
+      "Water over curbs on Levee St after 4 inches of rain in two hours.",
+      "Three low-water crossings closed; several cars stalled.",
+      "About 6,000 customers without power; cell towers on backup power.",
+      "River gauge forecast to crest 2 ft above flood stage tonight.",
+      "Swift-water rescue teams staged; residents urged to move to higher ground."
+    ]
+  },
+  "_default": {
+    "hazard": "unknown",
+    "severity": 2,
+    "confidence": 0.1,
+    "summary": "No model assessment is available for this zone. Severity is held at a conservative placeholder until an analyst or the model reviews the evidence.",
+    "evidence": []
+  }
+}
