@@ -4,8 +4,7 @@
   "description": "SpacetimeDB module for Welfare Check (concept prototype)",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "lint": "eslint src test"
+    "test": "vitest run"
   },
   "license": "MIT",
   "dependencies": {

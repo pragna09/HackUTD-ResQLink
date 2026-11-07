@@ -124,7 +124,8 @@ export function connectStdb(): Promise<Stdb> {
 function wrap(conn: DbConnection, identityHex: string): Stdb {
   const listeners: Record<string, Array<() => void>> = {};
   const fire = (t: string) => () => (listeners[t] ?? []).forEach(cb => cb());
-  const watch = (t: string, table: { onInsert: Function; onUpdate?: Function; onDelete: Function }) => {
+  type Hook = (cb: () => void) => void;
+  const watch = (t: string, table: { onInsert: Hook; onUpdate?: Hook; onDelete: Hook }) => {
     table.onInsert(fire(t));
     table.onUpdate?.(fire(t));
     table.onDelete(fire(t));

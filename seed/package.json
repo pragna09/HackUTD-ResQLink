@@ -1,0 +1,23 @@
+{
+  "name": "welfare-check-seed",
+  "version": "0.1.0",
+  "description": "Synthetic seed data for Welfare Check",
+  "scripts": {
+    "generate": "tsx generate.ts",
+    "seed": "tsx seed.ts",
+    "check": "tsx seed.ts --check",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^18.0.9",
+    "spacetimedb": "^2.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "private": true,
+  "type": "module"
+}

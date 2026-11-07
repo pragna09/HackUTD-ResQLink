@@ -7,8 +7,7 @@
     "start": "tsx worker.ts",
     "sample": "tsx sample.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "typecheck": "tsc --noEmit"
   },
   "license": "MIT",
   "dependencies": {
