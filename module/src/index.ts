@@ -47,7 +47,9 @@ export const upsertZone = spacetimedb.reducer(
     evidence: t.array(t.string()),
     source: t.string(),
   },
-  (ctx, args) => h.upsertZone(ctx, args)
+  (ctx, args) => {
+    h.upsertZone(ctx, args); // also re-scans immediately
+  }
 );
 
 /** Dashboard "Run weather research" button. The Weather agent watches for researchStatus = 'requested'. */

@@ -118,6 +118,8 @@ export function upsertZone(
   };
   if (ctx.db.zone.id.find(a.id)) ctx.db.zone.id.update(row);
   else ctx.db.zone.insert(row);
+  // Re-scan right away so a new rating shows up on the dashboard without waiting for the 30 s schedule.
+  return runScan(ctx);
 }
 
 export function requestResearch(ctx: Ctx, a: { zoneId: string }) {

@@ -40,7 +40,7 @@ describe('welfare-check module', () => {
 
   it('opens scored cases with a nearest center and an alert once severity >= 3', () => {
     const { harness, tx } = setup();
-    tx(ctx =>
+    const r = tx(ctx =>
       h.upsertZone(ctx, {
         ...DEMO_ZONE,
         hazard: 'flood',
@@ -51,7 +51,6 @@ describe('welfare-check module', () => {
         source: 'fallback',
       })
     );
-    const r = tx(ctx => h.runScan(ctx));
     expect(r.opened).toBeGreaterThan(10);
     const cases = [...harness.db.missingCase.iter()];
     expect(cases.length).toBe(r.opened);
