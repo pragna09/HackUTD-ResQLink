@@ -33,7 +33,7 @@ scripts/  bindings.mjs (runs `spacetime generate` for every client package)
 ## Prerequisites
 
 - Node.js 22+ (tested on 22.18)
-- SpacetimeDB CLI (on Windows it installs to `%LOCALAPPDATA%SpacetimeDB`; add that folder to PATH) — install from <https://spacetimedb.com/install>
+- SpacetimeDB CLI (on Windows it installs to `%LOCALAPPDATA%\SpacetimeDB`; add that folder to PATH) — install from <https://spacetimedb.com/install>
   (Windows PowerShell: `iwr https://windows.spacetimedb.com -useb | iex`; macOS/Linux: `curl -sSf https://install.spacetimedb.com | sh`)
 - Optional: a Gemini API key (<https://aistudio.google.com/apikey>) or an NVIDIA API key (<https://build.nvidia.com>).
   Without keys every agent uses its stored fallback and tags results `fallback`.
