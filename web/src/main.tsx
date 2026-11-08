@@ -11,7 +11,7 @@ function Home() {
       <span className="pill" style={{ color: '#8a5a00' }}>
         Concept prototype · synthetic data
       </span>
-      <h1>Welfare Check</h1>
+      <h1>ResQLink</h1>
       <p className="lede">
         Finds people whose phones went quiet inside a disaster zone, ranks them by urgency, and tells the nearest emergency center. Built on SpacetimeDB with Gemini agents. HackUTD 2026.
       </p>
