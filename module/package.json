@@ -1,0 +1,19 @@
+{
+  "name": "welfare-check-module",
+  "version": "0.1.0",
+  "description": "SpacetimeDB module for Welfare Check (concept prototype)",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "spacetimedb": "^2.14.1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "private": true,
+  "type": "module"
+}
