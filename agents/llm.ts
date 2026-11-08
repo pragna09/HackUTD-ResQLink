@@ -98,8 +98,8 @@ export function nvidiaAdapter(apiKey = env.NVIDIA_API_KEY, model = env.NVIDIA_MO
   };
 }
 
-export function adapterFromEnv(): ProviderAdapter {
-  return env.LLM_PROVIDER === 'nvidia' ? nvidiaAdapter() : geminiAdapter();
+export function adapterFromEnv(provider: 'gemini' | 'nvidia' = env.LLM_PROVIDER): ProviderAdapter {
+  return provider === 'nvidia' ? nvidiaAdapter() : geminiAdapter();
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -242,11 +242,33 @@ export function createLlm(opts: {
 }
 
 let defaultClient: LlmClient | undefined;
+let weatherClient: LlmClient | undefined;
+// One file cache for every client in the process, so two clients never overwrite each other's entries.
+// Keys include provider + model, so entries never cross providers.
+let sharedCache: Cache | undefined;
+const processCache = () => (sharedCache ??= fileCache());
+
+/**
+ * Client for the Weather Research agent (weather alerts + news). Uses WEATHER_PROVIDER when set
+ * (e.g. Nemotron for weather while Gemini handles triage), otherwise the default client.
+ */
+export function weatherLlm(): LlmClient {
+  if (!env.WEATHER_PROVIDER || env.WEATHER_PROVIDER === env.LLM_PROVIDER) return llm();
+  weatherClient ??= createLlm({
+    adapter: adapterFromEnv(env.WEATHER_PROVIDER),
+    cache: processCache(),
+    minIntervalMs: env.LLM_MIN_INTERVAL_MS,
+    forceFallback: env.LLM_FORCE_FALLBACK,
+    log: m => console.log(m),
+  });
+  return weatherClient;
+}
+
 /** Process-wide client configured from the environment. */
 export function llm(): LlmClient {
   defaultClient ??= createLlm({
     adapter: adapterFromEnv(),
-    cache: fileCache(),
+    cache: processCache(),
     minIntervalMs: env.LLM_MIN_INTERVAL_MS,
     forceFallback: env.LLM_FORCE_FALLBACK,
     log: m => console.log(m),

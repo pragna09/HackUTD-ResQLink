@@ -21,7 +21,13 @@ export const env = {
   GEMINI_API_KEY: str('GEMINI_API_KEY'),
   GEMINI_MODEL: str('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
   NVIDIA_API_KEY: str('NVIDIA_API_KEY'),
-  NVIDIA_MODEL: str('NVIDIA_MODEL', 'nvidia/nemotron-3-super-120b-a12b'),
+  /** Optional provider for the Weather Research agent only (weather + news). Empty = same as LLM_PROVIDER. */
+  WEATHER_PROVIDER: (() => {
+    const v = str('WEATHER_PROVIDER').toLowerCase();
+    return v === 'nvidia' || v === 'gemini' ? v : undefined;
+  })() as 'gemini' | 'nvidia' | undefined,
+  // nemotron-3-super-120b-a12b is listed in the catalog but returns 404 for free accounts (checked 2026-11-08).
+  NVIDIA_MODEL: str('NVIDIA_MODEL', 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'),
   NVIDIA_BASE_URL: 'https://integrate.api.nvidia.com/v1',
   LLM_FORCE_FALLBACK: str('LLM_FORCE_FALLBACK', '0') === '1',
   LLM_MIN_INTERVAL_MS: num('LLM_MIN_INTERVAL_MS', 4000),

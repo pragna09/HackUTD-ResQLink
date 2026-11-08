@@ -4,7 +4,7 @@
 
 When a disaster hits thousands of people at once, the people who need help most are often the ones who go quiet.
 Welfare Check finds people who **stopped sending their location inside a disaster zone**, ranks them by urgency,
-tells the **nearest emergency center**, and **holds a spot at a volunteer shelter**.
+and tells the **nearest emergency center**.
 
 Pitched as a module for an insurer’s mobile app (shown as a concept; no insurer logos, not affiliated).
 Alerts are always worded as a **welfare check**, never a confirmed emergency — a dead battery looks the same as lost signal.
@@ -13,7 +13,6 @@ Alerts are always worded as a **welfare check**, never a confirmed emergency —
 |--------------|---------------------------------------------------------------------------------------|
 | `/app`       | Phone page: opt in, small profile (name, age group, vulnerability, pets), 60 s heartbeat |
 | `/dashboard` | Responder dashboard: live ranked queue, map, case detail, zone panel, counters, demo controls |
-| `/volunteer` | Volunteer shelter offer form                                                          |
 
 Stack: **SpacetimeDB 2.x** (TypeScript module, reactive backend) · **Gemini** (default) / **NVIDIA Nemotron** (switch) agents in
 Node · **Vite + React + Leaflet/OpenStreetMap**. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the diagram and data flow,
@@ -23,8 +22,8 @@ and [STATUS.md](STATUS.md) for what is verified and what is pending.
 
 ```
 module/   SpacetimeDB module: tables, reducers, scheduled scan, urgency score (src/logic.ts), synthetic seed (src/seed_data.ts)
-agents/   Node worker: llm.ts (provider switch), weather.ts, triage.ts, shelter.ts, nws.ts, worker.ts
-web/      Vite + React app (/app, /dashboard, /volunteer)
+agents/   Node worker: llm.ts (provider switch), weather.ts, triage.ts, nws.ts, worker.ts
+web/      Vite + React app (/app, /dashboard)
 seed/     generate.ts (dump synthetic dataset to JSON) and seed.ts (load it via reset_demo)
 docs/     ARCHITECTURE.md
 scripts/  bindings.mjs (runs `spacetime generate` for every client package)
@@ -58,7 +57,7 @@ spacetime login                                   # once; opens a browser
 spacetime publish --server local --module-path module welfare-check
 npm run bindings                                  # -> web/src/module_bindings, agents/module_bindings, seed/module_bindings
 
-# terminal 2 — agents worker (Weather / Triage / Shelter)
+# terminal 2 — agents worker (Weather / Triage)
 npm --prefix agents run dev
 
 # terminal 3 — web app
@@ -80,12 +79,11 @@ A blue banner marks preview mode: a local mock built from the same seed and scor
 
 ## Demo script (90 seconds)
 
-1. Open `/dashboard`. Zone is severity 1, queue empty. 200 synthetic last-known pins on the map.
-2. **Run weather research** → the Weather agent reads NWS + the 5 synthetic news items → severity 4 flood (badge shows `llm` or `fallback`).
-3. Immediately (the rating triggers a scan) ~30 silent people appear, ranked. Each has a nearest center, a welfare-check alert, a one-line triage reason, and a held shelter spot.
-4. **Silence users** → more people go quiet; the queue reorders live.
-5. Open `/app` on a phone, opt in, tick *Use demo location*. Stop the heartbeat (close the tab) → after 10 min you appear in the queue; reopen → your case resolves.
-6. **Simulate disaster** sets severity directly (badge `simulated`) when you need a deterministic demo.
+1. Open `/dashboard`. Three synthetic scenarios are loaded (Dallas earthquake, Los Angeles fire, Miami flood), all at severity 1, queue empty.
+2. **Run weather research** → the Weather agent reads NWS + the zone's 5 synthetic news items → a hazard rating (badge shows `llm` or `fallback`).
+3. Or pick a scenario from **Simulate disaster ▾** (badge `simulated`): the map and zone panel switch to that city and its 6 at-risk people appear, ranked.
+   The 3 high-risk people rank above the 3 medium-risk ones. Each case has a nearest center, a welfare-check alert, a Wi-Fi / no Wi-Fi tag and a one-line triage reason.
+4. Open `/app` on a phone, opt in, tick *Use demo location*. Stop the heartbeat (close the tab) → after 10 min you appear in the queue; reopen → your case resolves.
 
 ## Urgency score
 
@@ -116,6 +114,6 @@ fallbacks for a fully deterministic demo.
 
 ## Synthetic data
 
-All 200 users, 8 emergency centers, 15 shelter offers and 5 news items are **invented** (`module/src/seed_data.ts`, deterministic).
-Names carry a `#NNN` suffix and every place name is marked “(synthetic)”. `npm --prefix seed run generate` writes the full dataset to
+All 30 people (10 per scenario: 4 no-risk outside the zone, 3 medium-risk, 3 high-risk), 9 emergency centers and 15 news items
+are **invented** (`module/src/seed_data.ts`, deterministic). Every place name is marked “(synthetic)”. `npm --prefix seed run generate` writes the full dataset to
 `seed/synthetic-data.json`.

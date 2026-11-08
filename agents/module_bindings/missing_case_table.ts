@@ -31,9 +31,6 @@ export default __t.row({
   status: __t.string(),
   assignedCenter: __t.option(__t.u32()).name("assigned_center"),
   centerDistanceKm: __t.f64().name("center_distance_km"),
-  matchedOffer: __t.option(__t.u64()).name("matched_offer"),
-  handoffNote: __t.string().name("handoff_note"),
-  matchSource: __t.string().name("match_source"),
   openedAt: __t.timestamp().name("opened_at"),
   updatedAt: __t.timestamp().name("updated_at"),
 });

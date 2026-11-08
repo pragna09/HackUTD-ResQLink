@@ -1,24 +1,20 @@
 // Agents worker: connects to SpacetimeDB as a client and runs the three agents.
 //   Weather Research: on a timer (WEATHER_INTERVAL_MIN) and whenever a zone's researchStatus = 'requested'.
 //   Triage:           for every open case with an empty rationale (batched).
-//   Shelter:          for every open case without a matched offer (code shortlist -> agent note).
 // Run: npm run dev   (in /agents)
 import { env } from './config';
-import { llm } from './llm';
+import { llm, weatherLlm } from './llm';
 import { fetchActiveAlerts } from './nws';
 import { connectStdb, type Stdb } from './stdb';
-import { buildShortlist, runShelter } from './shelter';
 import { runTriage } from './triage';
 import { runWeatherResearch } from './weather';
 import type { ZoneRow } from './types';
-
-const SHELTER_RETRY_MS = 60_000;
 
 async function researchZone(db: Stdb, zone: ZoneRow) {
   const nws = await fetchActiveAlerts(zone.centerLat, zone.centerLng);
   const news = db.news(zone.id);
   console.log(`[weather] ${zone.id}: ${nws.alerts.length} NWS alerts${nws.ok ? '' : ` (NWS error: ${nws.error})`}, ${news.length} news items`);
-  const res = await runWeatherResearch({ zone, news, nwsAlerts: nws.alerts, nwsError: nws.error });
+  const res = await runWeatherResearch({ zone, news, nwsAlerts: nws.alerts, nwsError: nws.error }, weatherLlm());
   await db.upsertZone({
     id: zone.id,
     name: zone.name,
@@ -37,6 +33,13 @@ async function main() {
     `[agents] provider=${client.adapter.name} model=${client.adapter.model} ` +
       (client.adapter.available && !env.LLM_FORCE_FALLBACK ? 'LIVE' : `FALLBACK ONLY (${env.LLM_FORCE_FALLBACK ? 'LLM_FORCE_FALLBACK=1' : client.adapter.unavailableReason})`)
   );
+  const wx = weatherLlm();
+  if (wx !== client) {
+    console.log(
+      `[agents] weather provider=${wx.adapter.name} model=${wx.adapter.model} ` +
+        (wx.adapter.available ? 'LIVE' : `FALLBACK ONLY (${wx.adapter.unavailableReason})`)
+    );
+  }
   const db = await connectStdb();
 
   // ---- Weather -------------------------------------------------------------------------------
@@ -87,46 +90,14 @@ async function main() {
     }
   };
 
-  // ---- Shelter -------------------------------------------------------------------------------
-  const shelterTried = new Map<string, number>();
-  let shelterRunning = false;
-  const shelter = async () => {
-    if (shelterRunning) return;
-    shelterRunning = true;
-    try {
-      const now = Date.now();
-      const pending = db
-        .cases()
-        .filter(c => c.status !== 'resolved' && c.matchedOffer === undefined)
-        .filter(c => now - (shelterTried.get(String(c.id)) ?? 0) > SHELTER_RETRY_MS)
-        .sort((a, b) => b.urgencyScore - a.urgencyScore);
-      for (const c of pending) {
-        shelterTried.set(String(c.id), Date.now());
-        const shortlist = buildShortlist(c, db.offers()); // fresh capacities each time
-        const pick = await runShelter(c, shortlist);
-        if (!pick) continue; // nothing suitable yet; retried when offers change
-        await db
-          .setMatch(pick)
-          .then(() => console.log(`[shelter] case ${c.id} -> offer ${pick.offerId} (${pick.source})`))
-          .catch(e => console.error(`[shelter] case ${c.id}:`, e));
-      }
-    } finally {
-      shelterRunning = false;
-    }
-  };
-
   let debounce: NodeJS.Timeout | undefined;
   const kick = () => {
     clearTimeout(debounce);
     debounce = setTimeout(() => {
-      void triage().then(shelter);
+      void triage();
     }, 1500);
   };
   db.onChange('missing_case', kick);
-  db.onChange('shelter_offer', () => {
-    shelterTried.clear(); // new or freed capacity: try everyone again
-    kick();
-  });
   kick();
   setInterval(kick, 30_000);
 

@@ -32,7 +32,6 @@ export function TopBar({ live }: { live: LiveState }) {
         <nav aria-label="Main">
           <NavLink to="/dashboard">Dashboard</NavLink>
           <NavLink to="/app">Phone app</NavLink>
-          <NavLink to="/volunteer">Volunteer</NavLink>
         </nav>
         <div className="spacer" />
         <div className="conn" role="status">

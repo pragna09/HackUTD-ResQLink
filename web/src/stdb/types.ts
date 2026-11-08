@@ -75,9 +75,6 @@ export interface Case {
   status: string;
   assignedCenter: number | undefined;
   centerDistanceKm: number;
-  matchedOffer: string | undefined;
-  handoffNote: string;
-  matchSource: string;
   openedAt: Date;
 }
 
@@ -90,19 +87,6 @@ export interface Alert {
   at: Date;
 }
 
-export interface Offer {
-  id: string;
-  owner: string;
-  hostName: string;
-  lat: number;
-  lng: number;
-  capacity: number;
-  acceptsPets: boolean;
-  accessible: boolean;
-  status: string;
-  isSynthetic: boolean;
-}
-
 export interface Snapshot {
   profiles: Map<string, Profile>;
   pings: Map<string, Ping>;
@@ -111,7 +95,6 @@ export interface Snapshot {
   centers: Center[];
   cases: Case[];
   alerts: Alert[];
-  offers: Offer[];
 }
 
 export const emptySnapshot = (): Snapshot => ({
@@ -122,7 +105,6 @@ export const emptySnapshot = (): Snapshot => ({
   centers: [],
   cases: [],
   alerts: [],
-  offers: [],
 });
 
 /** Reducer calls the UI can make. IDs are strings in the UI and converted to bigint at the edge. */
@@ -134,7 +116,6 @@ export interface Api {
   silenceUsers(zoneId: string, count: number): Promise<void>;
   resetDemo(): Promise<void>;
   acknowledgeAlert(alertId: string): Promise<void>;
-  registerShelter(a: { hostName: string; lat: number; lng: number; capacity: number; acceptsPets: boolean; accessible: boolean }): Promise<void>;
 }
 
 export type ConnStatus = 'connecting' | 'live' | 'error' | 'disconnected';

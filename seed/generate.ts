@@ -16,6 +16,5 @@ for (const z of data.zones) {
 }
 console.log(`users:     ${data.users.length} (${data.users.filter(u => u.silent).length} silent, ${data.users.filter(u => u.hasWifi).length} with Wi-Fi)`);
 console.log(`centers:   ${data.centers.length}`);
-console.log(`shelters:  ${data.shelters.length} (${data.shelters.reduce((s, o) => s + o.capacity, 0)} spots)`);
 console.log(`news:      ${data.news.length}`);
 console.log(`wrote ${fileURLToPath(out)}`);

@@ -546,104 +546,6 @@
       "lng": -80.206762
     }
   ],
-  "shelters": [
-    {
-      "hostName": "Fair Park Community Center (synthetic)",
-      "capacity": 6,
-      "acceptsPets": false,
-      "accessible": true,
-      "lat": 32.731481,
-      "lng": -96.704472
-    },
-    {
-      "hostName": "The Okafor family (synthetic)",
-      "capacity": 3,
-      "acceptsPets": true,
-      "accessible": false,
-      "lat": 32.683219,
-      "lng": -96.837196
-    },
-    {
-      "hostName": "Oak Lawn United Methodist Church (synthetic)",
-      "capacity": 5,
-      "acceptsPets": true,
-      "accessible": true,
-      "lat": 32.847189,
-      "lng": -96.845079
-    },
-    {
-      "hostName": "M. Delgado (synthetic)",
-      "capacity": 2,
-      "acceptsPets": true,
-      "accessible": false,
-      "lat": 32.757855,
-      "lng": -96.923262
-    },
-    {
-      "hostName": "Pasadena Rec Center (synthetic)",
-      "capacity": 6,
-      "acceptsPets": true,
-      "accessible": true,
-      "lat": 34.135335,
-      "lng": -118.160069
-    },
-    {
-      "hostName": "The Nguyen household (synthetic)",
-      "capacity": 3,
-      "acceptsPets": false,
-      "accessible": true,
-      "lat": 33.970807,
-      "lng": -118.2437
-    },
-    {
-      "hostName": "Culver City Masonic Hall (synthetic)",
-      "capacity": 4,
-      "acceptsPets": true,
-      "accessible": false,
-      "lat": 33.993416,
-      "lng": -118.365766
-    },
-    {
-      "hostName": "R. Patel (synthetic)",
-      "capacity": 2,
-      "acceptsPets": true,
-      "accessible": true,
-      "lat": 33.982921,
-      "lng": -118.174007
-    },
-    {
-      "hostName": "Coral Gables Youth Center (synthetic)",
-      "capacity": 6,
-      "acceptsPets": false,
-      "accessible": true,
-      "lat": 25.699349,
-      "lng": -80.249503
-    },
-    {
-      "hostName": "The Johnson family (synthetic)",
-      "capacity": 3,
-      "acceptsPets": true,
-      "accessible": false,
-      "lat": 25.777404,
-      "lng": -80.290029
-    },
-    {
-      "hostName": "Hialeah Community Church (synthetic)",
-      "capacity": 5,
-      "acceptsPets": true,
-      "accessible": true,
-      "lat": 25.831458,
-      "lng": -80.283491
-    },
-    {
-      "hostName": "S. Ramirez (synthetic)",
-      "capacity": 2,
-      "acceptsPets": true,
-      "accessible": true,
-      "lat": 25.736955,
-      "lng": -80.266784
-    }
-  ],
   "news": [
     {
       "area": "dallas-earthquake",
@@ -718,7 +620,7 @@
     {
       "area": "miami-flood",
       "minutesAgo": 8,
-      "text": "SYNTHETIC: Emergency shelters open; officials ask families to check on older relatives."
+      "text": "SYNTHETIC: Officials ask families to check on older relatives who have not been heard from."
     }
   ]
 }

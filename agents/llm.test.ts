@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createLlm, extractJson, type ProviderAdapter } from './llm';
-import { buildShortlist, runShelter } from './shelter';
 import { runTriage } from './triage';
 import { WeatherSchema, storedWeatherFallback } from './weather';
 
@@ -86,16 +85,5 @@ describe('agents in fallback mode', () => {
     expect(r.rationale).not.toMatch(/confirmed emergency/i);
   });
 
-  it('shelter only picks from the code shortlist, and the model cannot escape it', async () => {
-    const offers = [
-      { id: 1n, hostName: 'A', lat: 32.78, lng: -96.82, capacity: 2, acceptsPets: true, accessible: true, status: 'open' },
-      { id: 2n, hostName: 'B', lat: 32.771, lng: -96.82, capacity: 2, acceptsPets: false, accessible: true, status: 'open' },
-    ];
-    const sl = buildShortlist(c, offers);
-    expect(sl.map(s => s.offer.id)).toEqual([1n]);
-    const rogue = createLlm({ adapter: fake(['{"offerId":"2","note":"Go to B right now please."}']) });
-    const r = await runShelter(c, sl, rogue);
-    expect(r).toMatchObject({ offerId: 1n, source: 'fallback' });
-    expect(await runShelter(c, [], off)).toBeNull();
-  });
+
 });

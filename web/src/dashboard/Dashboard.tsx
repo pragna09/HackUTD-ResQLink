@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { URGENCY_WEIGHTS, SILENCE_CAP_MIN, SILENCE_THRESHOLD_MIN, MIN_SEVERITY_FOR_SCAN } from '../../../module/src/logic';
 import { DEMO_ZONE, ZONES } from '../../../module/src/seed_data';
 import { useApi, useLive } from '../stdb/store';
-import type { Alert, Case, Center, Offer, Profile, Zone } from '../stdb/types';
+import type { Alert, Case, Center, Profile, Zone } from '../stdb/types';
 import { SourceBadge, Toast, TopBar } from '../ui/Chrome';
 import { MapView } from '../ui/MapView';
 import { ago, minutesLabel, severityColor, urgencyColor } from '../ui/format';
@@ -47,7 +47,6 @@ export function Dashboard() {
     flagged: active.length,
     alerted: zoneAlerts.length,
     acknowledged: zoneAlerts.filter(a => a.status === 'acknowledged').length,
-    sheltered: active.filter(c => c.matchedOffer !== undefined).length,
   };
 
   const run = async (label: string, fn: () => Promise<void>) => {
@@ -69,7 +68,6 @@ export function Dashboard() {
       <div className="dash-strip">
         <Counter cls="flag" n={offline ? null : counters.flagged} label="Flagged" loading={loading} />
         <Counter cls="alert" n={offline ? null : counters.alerted} label={`Alerted · ${counters.acknowledged} ack`} loading={loading} />
-        <Counter cls="shelter" n={offline ? null : counters.sheltered} label="Shelter held" loading={loading} />
         <DemoControls zone={zone} zones={data.zones} onShowZone={showZone} run={run} disabled={!zone} />
       </div>
 
@@ -103,7 +101,6 @@ export function Dashboard() {
             cases={listed}
             pings={pings}
             centers={data.centers}
-            offers={data.offers}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />
@@ -122,7 +119,6 @@ export function Dashboard() {
             </div>
             <div className="row">
               <span className="mk-center" style={{ width: 14, height: 14, lineHeight: '14px', fontSize: 8, borderWidth: 1 }}>F</span> emergency center
-              <span className="mk-shelter" style={{ width: 14, height: 14, lineHeight: '14px', fontSize: 8, borderWidth: 1, marginLeft: 6 }}>3</span> shelter spots
             </div>
           </div>
           <div className="map-label">
@@ -137,7 +133,6 @@ export function Dashboard() {
             hasWifi={selected ? data.profiles.get(selected.user)?.hasWifi : undefined}
             alert={selected ? alertsByCase.get(selected.id) : undefined}
             center={data.centers.find(x => x.id === selected?.assignedCenter)}
-            offer={data.offers.find(o => o.id === selected?.matchedOffer)}
             onAck={id => run('Alert acknowledged', () => api.acknowledgeAlert(id))}
           />
         </div>
@@ -152,7 +147,7 @@ export function Dashboard() {
           Scans zones of severity ≥ {MIN_SEVERITY_FOR_SCAN}; silent = no heartbeat for {SILENCE_THRESHOLD_MIN}+ min. A dead battery looks the same as
           lost signal.
         </span>
-        <span>All people, centers, shelters and news are synthetic. Concept prototype — not affiliated with any insurer.</span>
+        <span>All people, centers and news are synthetic. Concept prototype — not affiliated with any insurer.</span>
       </footer>
       <Toast msg={toast.msg} />
     </div>
@@ -316,7 +311,6 @@ function Queue(props: {
               {c.hasPets && <span className="chip">pets</span>}
               {wifi !== undefined && <span className={`chip${wifi ? '' : ' warn'}`}>{wifi ? 'Wi-Fi' : 'no Wi-Fi'}</span>}
               {a && <span className={`chip ${a.status === 'acknowledged' ? 'ok' : 'info'}`}>{a.status === 'acknowledged' ? 'ack’d' : 'alert sent'}</span>}
-              {c.matchedOffer !== undefined && <span className="chip ok">shelter held</span>}
             </span>
             <span className="why">
               {c.rationale ? (
@@ -388,8 +382,8 @@ function ZonePanel({ zone, newsCount, loading }: { zone?: Zone; newsCount: numbe
   );
 }
 
-function CaseDetail(props: { c: Case | null; hasWifi?: boolean; alert?: Alert; center?: Center; offer?: Offer; onAck: (id: string) => void }) {
-  const { c, hasWifi, alert, center, offer, onAck } = props;
+function CaseDetail(props: { c: Case | null; hasWifi?: boolean; alert?: Alert; center?: Center; onAck: (id: string) => void }) {
+  const { c, hasWifi, alert, center, onAck } = props;
   if (!c)
     return (
       <section className="panel">
@@ -488,31 +482,6 @@ function CaseDetail(props: { c: Case | null; hasWifi?: boolean; alert?: Alert; c
           )}
         </div>
 
-        <div className="section">
-          <h3>
-            Shelter {c.matchSource && <SourceBadge source={c.matchSource} />}
-          </h3>
-          {offer ? (
-            <>
-              <dl className="kv">
-                <dt>Host</dt>
-                <dd>{offer.hostName}</dd>
-                <dt>Fits</dt>
-                <dd>
-                  {offer.acceptsPets && <span className="chip">pets ok</span>} {offer.accessible && <span className="chip">accessible</span>}{' '}
-                  <span className="muted">{offer.capacity} spots left</span>
-                </dd>
-              </dl>
-              <p className="quote" style={{ marginTop: 8 }}>
-                {c.handoffNote}
-              </p>
-            </>
-          ) : (
-            <p className="muted">
-              {c.status === 'resolved' ? 'Case resolved; any held spot was released.' : 'No shelter matched yet. Code shortlists by distance, capacity, pets and accessibility; the Shelter agent picks and writes the handoff.'}
-            </p>
-          )}
-        </div>
       </div>
     </section>
   );

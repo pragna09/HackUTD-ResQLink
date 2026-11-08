@@ -23,14 +23,13 @@ function setup() {
 }
 
 describe('welfare-check module', () => {
-  it('seeds three zones with 10 people each, per-city centers, shelters and news', () => {
+  it('seeds three zones with 10 people each, per-city centers and news', () => {
     const { harness } = setup();
     expect(harness.db.zone.count()).toBe(3n);
     for (const z of harness.db.zone.iter()) expect(z.severity).toBe(1);
     expect(harness.db.userProfile.count()).toBe(30n);
     expect(harness.db.locationPing.count()).toBe(30n);
     expect(harness.db.emergencyCenter.count()).toBe(9n);
-    expect(harness.db.shelterOffer.count()).toBe(12n);
     expect(harness.db.newsItem.count()).toBe(15n);
     expect(harness.db.scanSchedule.count()).toBe(1n);
   });
@@ -150,7 +149,7 @@ describe('welfare-check module', () => {
     expect(harness.db.missingCase.id.find(first.id)!.status).toBe('resolved');
   });
 
-  it('agents write text without touching the score; set_match enforces constraints and capacity', () => {
+  it('agents write text without touching the score', () => {
     const { harness, tx } = setup();
     tx(ctx => h.simulateDisaster(ctx, { zoneId: DEMO_ZONE.id, severity: 5 }));
     const c = [...harness.db.missingCase.iter()][0];
@@ -159,13 +158,6 @@ describe('welfare-check module', () => {
     expect(after.rationaleSource).toBe('fallback');
     expect(after.urgencyScore).toBe(c.urgencyScore);
 
-    const ok = [...harness.db.shelterOffer.iter()].find(
-      o => (!c.hasPets || o.acceptsPets) && (!c.vulnerabilityFlag || o.accessible)
-    )!;
-    tx(ctx => h.setMatch(ctx, { caseId: c.id, offerId: ok.id, note: 'note', source: 'fallback' }));
-    expect(harness.db.missingCase.id.find(c.id)!.matchedOffer).toBe(ok.id);
-    expect(harness.db.shelterOffer.id.find(ok.id)!.capacity).toBe(ok.capacity - 1);
-    expect(() => tx(ctx => h.setMatch(ctx, { caseId: c.id, offerId: ok.id, note: 'x', source: 'fallback' }))).toThrow();
     expect(() => tx(ctx => h.setRationale(ctx, { caseId: c.id, rationale: 'x', source: 'made-up' }))).toThrow();
   });
 

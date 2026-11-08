@@ -7,7 +7,6 @@ import {
   SILENCE_THRESHOLD_MIN,
   isInsideZone,
   nearest,
-  shelterShortlist,
   urgencyScore,
   welfareCheckMessage,
 } from '../../../module/src/logic';
@@ -33,7 +32,6 @@ function seed(): Snapshot {
   });
   d.news.forEach((n, i) => s.news.push({ id: String(i + 1), area: n.area, text: n.text, at: minAgo(n.minutesAgo), isSynthetic: true }));
   d.centers.forEach(c => s.centers.push({ ...c, isSynthetic: true }));
-  d.shelters.forEach((o, i) => s.offers.push({ ...o, id: String(i + 1), owner: 'seed', status: 'open', isSynthetic: true }));
   d.users.forEach(u => {
     const id = `synthetic-${u.index}`;
     s.profiles.set(id, { identity: id, displayName: u.displayName, ageGroup: u.ageGroup, vulnerabilityFlag: u.vulnerabilityFlag, hasPets: u.hasPets, hasWifi: u.hasWifi, optIn: true, isSynthetic: true, simSilent: u.silent });
@@ -48,7 +46,7 @@ export function createMockBackend(): Backend {
   let nextId = 1;
   let state: LiveState = { mode: 'mock', status: 'live', identity: ME, data, version: 0 };
   const emit = () => {
-    state = { ...state, data: { ...data, cases: [...data.cases], alerts: [...data.alerts], offers: [...data.offers], zones: [...data.zones] }, version: state.version + 1 };
+    state = { ...state, data: { ...data, cases: [...data.cases], alerts: [...data.alerts], zones: [...data.zones] }, version: state.version + 1 };
     listeners.forEach(l => l());
   };
 
@@ -64,7 +62,7 @@ export function createMockBackend(): Backend {
       const silent = (now - lp.at.getTime()) / 60_000;
       const active = data.cases.find(c => c.user === lp.user && c.status !== 'resolved');
       if (silent < SILENCE_THRESHOLD_MIN) {
-        if (active) Object.assign(active, { status: 'resolved', matchedOffer: undefined });
+        if (active) Object.assign(active, { status: 'resolved' });
         continue;
       }
       const zone = data.zones.filter(z => isInsideZone(lp, z)).sort((a, b) => b.severity - a.severity)[0];
@@ -83,7 +81,7 @@ export function createMockBackend(): Backend {
       const c: Case = {
         id: String(nextId++), user: lp.user, zoneId: zone.id, displayName: profile.displayName, ...fields,
         rationale: '', rationaleSource: '', status: 'open', assignedCenter: near?.item.id,
-        centerDistanceKm: near ? Math.round(near.km * 100) / 100 : -1, matchedOffer: undefined, handoffNote: '', matchSource: '', openedAt: new Date(),
+        centerDistanceKm: near ? Math.round(near.km * 100) / 100 : -1, openedAt: new Date(),
       };
       data.cases.push(c);
       if (near) {
@@ -93,24 +91,13 @@ export function createMockBackend(): Backend {
         });
       }
     }
-    // Stand-ins for the triage + shelter agents (fallback templates, honestly tagged).
+    // Stand-in for the triage agent (fallback template, honestly tagged).
     setTimeout(() => {
       for (const c of data.cases) {
         if (c.status === 'resolved') continue;
         if (!c.rationale) {
           c.rationale = `Silent ${Math.round(c.silentMinutes)} min inside a severity ${c.severity} zone${c.vulnerabilityFlag ? ', self-reported as vulnerable' : ''}${c.hasPets ? ', has pets' : ''} — status unknown, the phone may simply be off or out of signal.`;
           c.rationaleSource = 'fallback';
-        }
-        if (!c.matchedOffer) {
-          const sl = shelterShortlist({ lat: c.lastLat, lng: c.lastLng, hasPets: c.hasPets, needsAccessible: c.vulnerabilityFlag }, data.offers.map(o => ({ ...o, id: BigInt(o.id) })));
-          if (sl[0]) {
-            const offer = data.offers.find(o => o.id === String(sl[0].offer.id))!;
-            offer.capacity -= 1;
-            if (offer.capacity === 0) offer.status = 'full';
-            c.matchedOffer = offer.id;
-            c.handoffNote = `Holding 1 spot at ${offer.hostName} (${sl[0].km.toFixed(1)} km) for ${c.displayName}. Use it only if responders reach them and they need shelter.`;
-            c.matchSource = 'fallback';
-          }
         }
       }
       emit();
@@ -181,10 +168,6 @@ export function createMockBackend(): Backend {
       a.status = 'acknowledged';
       const c = data.cases.find(x => x.id === a.caseId);
       if (c?.status === 'open') c.status = 'acknowledged';
-      emit();
-    },
-    async registerShelter(a) {
-      data.offers.push({ ...a, id: String(1000 + data.offers.length), owner: ME, status: 'open', isSynthetic: false });
       emit();
     },
   };

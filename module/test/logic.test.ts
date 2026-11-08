@@ -3,7 +3,6 @@ import {
   URGENCY_WEIGHTS,
   haversineKm,
   nearest,
-  shelterShortlist,
   urgencyScore,
   welfareCheckMessage,
 } from '../src/logic';
@@ -68,25 +67,6 @@ describe('haversineKm', () => {
     ];
     expect(nearest({ lat: 32.7705, lng: -96.8265 }, items)?.item.id).toBe(2);
     expect(nearest({ lat: 0, lng: 0 }, [])).toBeNull();
-  });
-});
-
-describe('shelterShortlist', () => {
-  const base = { status: 'open', capacity: 2, acceptsPets: true, accessible: true };
-  const offers = [
-    { ...base, id: 1n, lat: 32.78, lng: -96.82 },
-    { ...base, id: 2n, lat: 32.771, lng: -96.826, acceptsPets: false },
-    { ...base, id: 3n, lat: 32.772, lng: -96.826, accessible: false },
-    { ...base, id: 4n, lat: 32.773, lng: -96.826, capacity: 0 },
-    { ...base, id: 5n, lat: 34.0, lng: -96.8 },
-  ];
-  it('filters by pets, accessibility, capacity and distance', () => {
-    const ids = shelterShortlist({ lat: 32.7705, lng: -96.8265, hasPets: true, needsAccessible: true }, offers).map(o => o.offer.id);
-    expect(ids).toEqual([1n]);
-  });
-  it('ranks nearest first', () => {
-    const ids = shelterShortlist({ lat: 32.7705, lng: -96.8265, hasPets: false, needsAccessible: false }, offers).map(o => o.offer.id);
-    expect(ids).toEqual([2n, 3n, 1n]);
   });
 });
 

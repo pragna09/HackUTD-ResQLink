@@ -169,7 +169,7 @@ export function PhoneApp() {
                 <input type="checkbox" checked={vulnerable} onChange={e => setVulnerable(e.target.checked)} />
                 <span>
                   I may need extra help
-                  <small>Mobility, medical equipment, or caring for someone. Raises priority and limits shelters to accessible ones.</small>
+                  <small>Mobility, medical equipment, or caring for someone. Raises your priority if you go quiet.</small>
                 </span>
               </label>
             </div>
@@ -177,7 +177,7 @@ export function PhoneApp() {
               <label className="check">
                 <input type="checkbox" checked={hasPets} onChange={e => setHasPets(e.target.checked)} />
                 <span>
-                  I have pets <small>So we only hold shelter spots that accept them.</small>
+                  I have pets <small>So responders know to expect animals.</small>
                 </span>
               </label>
             </div>

@@ -12,7 +12,7 @@ export const userProfile = table(
     /** '0-17' | '18-64' | '65+' */
     ageGroup: t.string(),
     vulnerabilityFlag: t.bool(),
-    /** Added to the brief's model: the shelter filter needs to know about pets. */
+    /** Shown to responders on the case. */
     hasPets: t.bool(),
     /** Whether the person has Wi-Fi at home. Shown to responders; not part of the urgency score. */
     hasWifi: t.bool(),
@@ -111,11 +111,6 @@ export const missingCase = table(
     status: t.string(),
     assignedCenter: t.option(t.u32()),
     centerDistanceKm: t.f64(),
-    // Shelter step output.
-    matchedOffer: t.option(t.u64()),
-    handoffNote: t.string(),
-    /** '' until matched, then 'llm' | 'fallback' */
-    matchSource: t.string(),
     openedAt: t.timestamp(),
     updatedAt: t.timestamp(),
   }
@@ -131,24 +126,6 @@ export const alert = table(
     /** 'sent' | 'acknowledged' */
     status: t.string(),
     timestamp: t.timestamp(),
-  }
-);
-
-export const shelterOffer = table(
-  { name: 'shelter_offer', public: true },
-  {
-    id: t.u64().primaryKey().autoInc(),
-    owner: t.identity(),
-    hostName: t.string(),
-    lat: t.f64(),
-    lng: t.f64(),
-    /** Remaining spots. Decremented by set_match. */
-    capacity: t.u32(),
-    acceptsPets: t.bool(),
-    accessible: t.bool(),
-    /** 'open' | 'full' */
-    status: t.string(),
-    isSynthetic: t.bool(),
   }
 );
 
@@ -169,7 +146,6 @@ const spacetimedb = schema({
   emergencyCenter,
   missingCase,
   alert,
-  shelterOffer,
   scanSchedule,
 });
 

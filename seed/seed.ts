@@ -18,7 +18,6 @@ const TABLES = [
   'zone',
   'news_item',
   'emergency_center',
-  'shelter_offer',
   'missing_case',
   'alert',
 ] as const;
@@ -33,7 +32,6 @@ DbConnection.builder()
       zone: conn.db.zone.count(),
       news_item: conn.db.newsItem.count(),
       emergency_center: conn.db.emergencyCenter.count(),
-      shelter_offer: conn.db.shelterOffer.count(),
       missing_case: conn.db.missingCase.count(),
       alert: conn.db.alert.count(),
     });

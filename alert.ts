@@ -24,13 +24,37 @@ const client = new OpenAI({
   baseURL: "https://integrate.api.nvidia.com/v1",
 });
 
+// ---------- TYPES ----------
+interface Alert {
+  event: string;
+  severity: string;
+  headline: string;
+  instruction: string | null;
+  ends: string | null;
+}
+interface NwsResponse {
+  features: Array<{ properties: Alert }>;
+}
+interface Hour {
+  time: string;
+  tempC: number;
+  rainChancePct: number;
+  gustKmh: number;
+}
+interface OpenMeteoResponse {
+  hourly: { time: string[]; temperature_2m: number[]; precipitation_probability: number[]; wind_gusts_10m: number[] };
+}
+interface RssItem {
+  title: string;
+}
+
 // ---------- 1. DATA SOURCES ----------
-async function getAlerts() {
+async function getAlerts(): Promise<Alert[]> {
   const res = await fetch(`https://api.weather.gov/alerts/active?point=${LAT},${LON}`, {
     headers: { "User-Agent": "weather-alert-test (you@email.com)" },
   });
-  const data: any = await res.json();
-  return data.features.map((f: any) => ({
+  const data = (await res.json()) as NwsResponse;
+  return data.features.map(f => ({
     event: f.properties.event,
     severity: f.properties.severity,
     headline: f.properties.headline,
@@ -39,13 +63,13 @@ async function getAlerts() {
   }));
 }
 
-async function getForecast() {
+async function getForecast(): Promise<Hour[]> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
     `&hourly=temperature_2m,precipitation_probability,wind_gusts_10m` +
     `&forecast_hours=12&timezone=auto`;
-  const h: any = (await (await fetch(url)).json()).hourly;
-  return h.time.map((t: string, i: number) => ({
+  const h = ((await (await fetch(url)).json()) as OpenMeteoResponse).hourly;
+  return h.time.map((t, i) => ({
     time: t,
     tempC: h.temperature_2m[i],
     rainChancePct: h.precipitation_probability[i],
@@ -53,18 +77,18 @@ async function getForecast() {
   }));
 }
 
-async function getNews() {
+async function getNews(): Promise<string[]> {
   try {
     const xml = await (await fetch(NEWS_RSS)).text();
-    const items = new XMLParser().parse(xml)?.rss?.channel?.item ?? [];
-    return (Array.isArray(items) ? items : [items]).slice(0, 5).map((i: any) => i.title);
+    const items: RssItem | RssItem[] = new XMLParser().parse(xml)?.rss?.channel?.item ?? [];
+    return (Array.isArray(items) ? items : [items]).slice(0, 5).map(i => i.title);
   } catch {
     return []; // news is optional
   }
 }
 
 // ---------- 2. RULES (code decides IF it's bad) ----------
-function findRisks(alerts: any[], hours: any[]) {
+function findRisks(alerts: Alert[], hours: Hour[]) {
   const risks: string[] = [];
   for (const a of alerts) {
     if (["Moderate", "Severe", "Extreme"].includes(a.severity)) risks.push(`NWS alert: ${a.event}`);
@@ -78,7 +102,8 @@ function findRisks(alerts: any[], hours: any[]) {
 
 // ---------- 3. NEMOTRON (model explains it) ----------
 async function writeNotification(payload: object) {
-  const resp = await client.chat.completions.create({
+  // chat_template_kwargs is an NVIDIA extension the OpenAI types don't know about.
+  const body: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { chat_template_kwargs?: { enable_thinking: boolean } } = {
     model: MODEL,
     temperature: 0.2,
     max_tokens: 600,
@@ -96,7 +121,8 @@ async function writeNotification(payload: object) {
     ],
     // Turn off Nemotron's long "thinking" trace for a faster, cleaner reply
     chat_template_kwargs: { enable_thinking: false },
-  } as any);
+  };
+  const resp = await client.chat.completions.create(body);
 
   let text = resp.choices[0].message.content ?? "";
   text = text.replace(/<think>[\s\S]*?<\/think>/g, ""); // strip reasoning if it appears anyway

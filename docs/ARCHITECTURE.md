@@ -1,19 +1,19 @@
 # Welfare Check — Architecture
 
-> Concept prototype. All people, places, centers, shelters and news items are **synthetic**.
+> Concept prototype. All people, places, centers and news items are **synthetic**.
 
 ## One sentence
 
 The system finds people who stopped sending their location inside a disaster zone, ranks them by
-urgency, tells the nearest emergency center, and matches them to a volunteer shelter.
+urgency, and tells the nearest emergency center.
 
 ## Components
 
 | Package    | What it is                                                                 | Runs where                     |
 |------------|----------------------------------------------------------------------------|--------------------------------|
 | `/module`  | SpacetimeDB module (TypeScript). Tables, reducers, scheduled scan, scoring. | Inside SpacetimeDB             |
-| `/agents`  | Node/TS worker. Weather Research, Triage and Shelter agents. All LLM + web calls live here. | Your laptop / any Node host |
-| `/web`     | Vite + React + Leaflet. Routes `/app`, `/dashboard`, `/volunteer`.          | Browser                         |
+| `/agents`  | Node/TS worker. Weather Research and Triage agents. All LLM + web calls live here. | Your laptop / any Node host |
+| `/web`     | Vite + React + Leaflet. Routes `/app`, `/dashboard`.                        | Browser                         |
 | `/seed`    | Seed + inspection script. Writes the synthetic dataset to JSON and loads it via `reset_demo`. | CLI |
 
 The module never calls outside web APIs. Every model call and every HTTP request (NWS, Gemini,
@@ -37,24 +37,21 @@ flowchart LR
     T5[(emergency_center)]
     T6[(missing_case)]
     T7[(alert)]
-    T8[(shelter_offer)]
     S[[scan_for_missing<br/>scheduled every 30s]]
-    R --> T1 & T2 & T3 & T4 & T6 & T7 & T8
+    R --> T1 & T2 & T3 & T4 & T6 & T7
     S -->|silent + zone sev ≥ 3<br/>urgency score<br/>haversine nearest center| T6 & T7
   end
 
   subgraph Agents["/agents worker (Node)"]
     W[Weather Research agent] -->|upsert_zone| R
     TR[Triage agent] -->|set_rationale| R
-    SH[Shelter step: code shortlist<br/>+ Shelter agent note] -->|set_match| R
     LLM[llm.ts<br/>gemini default / nvidia switch<br/>zod validate · retry once · fallback · cache]
-    W & TR & SH --> LLM
+    W & TR --> LLM
     NWS[(api.weather.gov<br/>/alerts/active?point=)] --> W
   end
 
   T3 & T4 -. subscribe .-> W
   T6 -. subscribe .-> TR
-  T6 & T8 & T1 -. subscribe .-> SH
 
   subgraph Dash["/dashboard"]
     D[Ranked queue · map · case detail · zone panel · counters · demo controls]
@@ -62,9 +59,6 @@ flowchart LR
   STDB -. live subscription .-> D
   D -->|request_research / simulate_disaster / silence_users / reset_demo / acknowledge_alert| R
 
-  subgraph Vol["/volunteer"]
-    V[Shelter offer form] -->|register_shelter| R
-  end
 ```
 
 ## Data flow
@@ -84,15 +78,12 @@ flowchart LR
    `alert` row. Cases close automatically (`resolved`) when the person pings again.
 4. **Triage.** The Triage agent watches `missing_case` rows with an empty rationale and writes one
    sentence per case (`set_rationale`). It batches up to 10 cases per model call. It never changes the score.
-5. **Shelter.** Code filters `shelter_offer` rows by status, remaining capacity, distance, pets and
-   accessibility, and ranks them. The Shelter agent may choose from that shortlist only and writes a
-   handoff note. `set_match` re-validates the offer and decrements capacity.
-6. **Dashboard.** `/dashboard` subscribes to every public table and re-renders on every row change.
+5. **Dashboard.** `/dashboard` subscribes to every public table and re-renders on every row change.
 
 ## Rules the code enforces
 
-- **Code decides numbers.** Urgency score, silent minutes, distances, nearest center and the shelter
-  shortlist are computed in TypeScript (`module/src/logic.ts`). The model only reads and writes text
+- **Code decides numbers.** Urgency score, silent minutes, distances and nearest center are
+  computed in TypeScript (`module/src/logic.ts`). The model only reads and writes text
   (plus the hazard rating, which the spec assigns to the Weather agent).
 - **Wording.** Alerts say "welfare check", never "confirmed emergency". A dead battery and lost signal
   look identical, and the UI says so.

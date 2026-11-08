@@ -22,10 +22,6 @@ export const MIN_SEVERITY_FOR_SCAN = 3;
 export const SCAN_INTERVAL_SEC = 30;
 /** Heartbeat interval used by /app. */
 export const HEARTBEAT_INTERVAL_SEC = 60;
-/** Offers farther than this are not shortlisted. */
-export const MAX_SHELTER_KM = 25;
-/** Shortlist size handed to the Shelter agent. */
-export const SHELTER_SHORTLIST_SIZE = 5;
 
 export interface LatLng {
   lat: number;
@@ -100,43 +96,6 @@ export function minutesBetweenMicros(laterMicros: bigint, earlierMicros: bigint)
   const diff = laterMicros - earlierMicros;
   if (diff <= 0n) return 0;
   return Number(diff) / 60_000_000;
-}
-
-export interface ShelterNeeds extends LatLng {
-  hasPets: boolean;
-  /** Vulnerable people get accessible offers only. */
-  needsAccessible: boolean;
-}
-
-export interface OfferLike extends LatLng {
-  id: bigint;
-  capacity: number;
-  acceptsPets: boolean;
-  accessible: boolean;
-  status: string;
-}
-
-/**
- * Code-side shelter filter + rank. Filters by open status, remaining capacity, distance, pets and
- * accessibility. Ranks nearest first, then larger capacity. The Shelter agent may only pick from this list.
- */
-export function shelterShortlist<T extends OfferLike>(
-  needs: ShelterNeeds,
-  offers: Iterable<T>,
-  maxKm = MAX_SHELTER_KM,
-  size = SHELTER_SHORTLIST_SIZE
-): Array<{ offer: T; km: number }> {
-  const out: Array<{ offer: T; km: number }> = [];
-  for (const offer of offers) {
-    if (offer.status !== 'open' || offer.capacity < 1) continue;
-    if (needs.hasPets && !offer.acceptsPets) continue;
-    if (needs.needsAccessible && !offer.accessible) continue;
-    const km = haversineKm(needs, offer);
-    if (km > maxKm) continue;
-    out.push({ offer, km });
-  }
-  out.sort((a, b) => a.km - b.km || b.offer.capacity - a.offer.capacity);
-  return out.slice(0, size);
 }
 
 /** The exact alert wording. Never says "confirmed emergency". */

@@ -42,18 +42,6 @@ export interface CaseRow {
   status: string;
   assignedCenter: number | undefined;
   centerDistanceKm: number;
-  matchedOffer: bigint | undefined;
-}
-
-export interface OfferRow {
-  id: bigint;
-  hostName: string;
-  lat: number;
-  lng: number;
-  capacity: number;
-  acceptsPets: boolean;
-  accessible: boolean;
-  status: string;
 }
 
 export interface CenterRow {

@@ -2,6 +2,13 @@
 
 Snapshot: 2026-11-07, end of build session 1. Environment: Windows 11, Node 22.18, **no SpacetimeDB CLI, no Gemini/NVIDIA keys**.
 
+## Update — session 3 (2026-11-08)
+
+- **Shelters removed everywhere**: `shelter_offer` table, `register_shelter` / `set_match` reducers, the Shelter agent, the
+  `/volunteer` page, shelter fields on `missing_case`, map markers and dashboard panels. Older notes below still mention them.
+- Seed is now three scenarios (Dallas earthquake, LA fire, Miami flood), 10 people each; the dashboard's Simulate disaster is a dropdown.
+- Weather Research runs on NVIDIA Nemotron (`WEATHER_PROVIDER=nvidia`, `nemotron-3-nano-omni-30b-a3b-reasoning`); triage stays on Gemini.
+
 ## Completed (verified in this session)
 
 - [x] **SpacetimeDB module** (`/module`) — 9 tables, 13 reducers + `init`, scheduled `scan_for_missing` (30 s interval schedule table).

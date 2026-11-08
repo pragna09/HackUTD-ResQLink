@@ -1,5 +1,5 @@
 // Deterministic SYNTHETIC demo dataset: three disaster scenarios (Dallas earthquake, Los Angeles fire,
-// Miami flood), 10 people each. Every person, place, center, shelter and news item is invented.
+// Miami flood), 10 people each. Every person, place, center and news item is invented.
 // Pure TypeScript with no SpacetimeDB imports, so the module (reset_demo / init), the /seed script,
 // the web preview backend and tests all produce the same data.
 
@@ -50,15 +50,6 @@ export interface SeedCenter {
   lng: number;
 }
 
-export interface SeedShelter {
-  hostName: string;
-  lat: number;
-  lng: number;
-  capacity: number;
-  acceptsPets: boolean;
-  accessible: boolean;
-}
-
 export interface SeedNews {
   area: string;
   text: string;
@@ -69,7 +60,6 @@ export interface SeedDataset {
   zones: SeedZone[];
   users: SeedUser[];
   centers: SeedCenter[];
-  shelters: SeedShelter[];
   news: SeedNews[];
 }
 
@@ -103,7 +93,7 @@ export const ZONES: readonly SeedZone[] = [
   { id: 'miami-flood', name: 'Miami Flood Zone (synthetic)', city: 'Miami', hazard: 'flood', centerLat: 25.7617, centerLng: -80.1918, radiusKm: 5 },
 ];
 
-/** Default zone for pages that show a single area (/app demo location, /volunteer map). */
+/** Default zone for pages that show a single area (/app demo location). */
 export const DEMO_ZONE: SeedZone = ZONES[0];
 
 // People: 4 none, 3 medium, 3 high per zone. In each zone one high-risk person has Wi-Fi and one does not.
@@ -183,27 +173,6 @@ const CENTER_SPECS: Record<string, Array<{ type: SeedCenter['type']; name: strin
   ],
 };
 
-const SHELTER_SPECS: Record<string, Array<Omit<SeedShelter, 'lat' | 'lng'> & PlaceSpec>> = {
-  'dallas-earthquake': [
-    { hostName: 'Fair Park Community Center', capacity: 6, acceptsPets: false, accessible: true, km: 10, bearing: 120 },
-    { hostName: 'The Okafor family', capacity: 3, acceptsPets: true, accessible: false, km: 11, bearing: 200 },
-    { hostName: 'Oak Lawn United Methodist Church', capacity: 5, acceptsPets: true, accessible: true, km: 9, bearing: 330 },
-    { hostName: 'M. Delgado', capacity: 2, acceptsPets: true, accessible: false, km: 12, bearing: 260 },
-  ],
-  'la-fire': [
-    { hostName: 'Pasadena Rec Center', capacity: 6, acceptsPets: true, accessible: true, km: 12, bearing: 40 },
-    { hostName: 'The Nguyen household', capacity: 3, acceptsPets: false, accessible: true, km: 9, bearing: 180 },
-    { hostName: 'Culver City Masonic Hall', capacity: 4, acceptsPets: true, accessible: false, km: 13, bearing: 240 },
-    { hostName: 'R. Patel', capacity: 2, acceptsPets: true, accessible: true, km: 10, bearing: 140 },
-  ],
-  'miami-flood': [
-    { hostName: 'Coral Gables Youth Center', capacity: 6, acceptsPets: false, accessible: true, km: 9, bearing: 220 },
-    { hostName: 'The Johnson family', capacity: 3, acceptsPets: true, accessible: false, km: 10, bearing: 280 },
-    { hostName: 'Hialeah Community Church', capacity: 5, acceptsPets: true, accessible: true, km: 12, bearing: 310 },
-    { hostName: 'S. Ramirez', capacity: 2, acceptsPets: true, accessible: true, km: 8, bearing: 250 },
-  ],
-};
-
 const NEWS: SeedNews[] = [
   { area: 'dallas-earthquake', minutesAgo: 120, text: 'SYNTHETIC: Magnitude 5.8 earthquake centered near downtown Dallas; shaking felt across the Metroplex.' },
   { area: 'dallas-earthquake', minutesAgo: 95, text: 'SYNTHETIC: Facades collapse on older brick buildings in Deep Ellum; several streets closed.' },
@@ -219,14 +188,13 @@ const NEWS: SeedNews[] = [
   { area: 'miami-flood', minutesAgo: 90, text: 'SYNTHETIC: King tide pushes Biscayne Bay over seawalls in Brickell; several roads impassable.' },
   { area: 'miami-flood', minutesAgo: 65, text: 'SYNTHETIC: 55,000 outages in Miami-Dade; flooded substations delay restoration.' },
   { area: 'miami-flood', minutesAgo: 30, text: 'SYNTHETIC: Water rescues underway on SW 8th St; residents told not to drive through standing water.' },
-  { area: 'miami-flood', minutesAgo: 8, text: 'SYNTHETIC: Emergency shelters open; officials ask families to check on older relatives.' },
+  { area: 'miami-flood', minutesAgo: 8, text: 'SYNTHETIC: Officials ask families to check on older relatives who have not been heard from.' },
 ];
 
 export function buildSeedDataset(seed = SEED): SeedDataset {
   const rand = prng(seed);
   const users: SeedUser[] = [];
   const centers: SeedCenter[] = [];
-  const shelters: SeedShelter[] = [];
 
   for (const z of ZONES) {
     for (const s of PEOPLE[z.id]) {
@@ -251,12 +219,9 @@ export function buildSeedDataset(seed = SEED): SeedDataset {
     for (const c of CENTER_SPECS[z.id]) {
       centers.push({ id: centers.length + 1, type: c.type, name: c.name, ...offset(z.centerLat, z.centerLng, c.km, c.bearing) });
     }
-    for (const { km, bearing, ...s } of SHELTER_SPECS[z.id]) {
-      shelters.push({ ...s, hostName: `${s.hostName} (synthetic)`, ...offset(z.centerLat, z.centerLng, km, bearing) });
-    }
   }
 
-  return { zones: ZONES.map(z => ({ ...z })), users, centers, shelters, news: NEWS.map(n => ({ ...n })) };
+  return { zones: ZONES.map(z => ({ ...z })), users, centers, news: NEWS.map(n => ({ ...n })) };
 }
 
 /** Synthetic identities live in a recognisable range so they never collide with real ones in practice. */

@@ -152,61 +152,6 @@ export function acknowledgeAlert(ctx: Ctx, a: { alertId: bigint }) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Shelters
-// ---------------------------------------------------------------------------------------------
-
-export function registerShelter(
-  ctx: Ctx,
-  a: { hostName: string; lat: number; lng: number; capacity: number; acceptsPets: boolean; accessible: boolean }
-) {
-  const hostName = a.hostName.trim().slice(0, 80);
-  if (!hostName) throw new SenderError('Host name is required');
-  if (!isLat(a.lat) || !isLng(a.lng)) throw new SenderError('Invalid coordinates');
-  if (!Number.isInteger(a.capacity) || a.capacity < 1 || a.capacity > 50) throw new SenderError('Capacity must be 1-50');
-  ctx.db.shelterOffer.insert({
-    id: 0n,
-    owner: ctx.sender,
-    hostName,
-    lat: a.lat,
-    lng: a.lng,
-    capacity: a.capacity,
-    acceptsPets: a.acceptsPets,
-    accessible: a.accessible,
-    status: 'open',
-    isSynthetic: false,
-  });
-}
-
-export function setMatch(ctx: Ctx, a: { caseId: bigint; offerId: bigint; note: string; source: string }) {
-  if (!SOURCES.has(a.source)) throw new SenderError('source must be llm or fallback');
-  const c = ctx.db.missingCase.id.find(a.caseId);
-  if (!c) throw new SenderError('Unknown case');
-  if (c.status === 'resolved') throw new SenderError('Case is resolved');
-  if (c.matchedOffer !== undefined) throw new SenderError('Case already matched');
-  const offer = ctx.db.shelterOffer.id.find(a.offerId);
-  if (!offer || offer.status !== 'open' || offer.capacity < 1) throw new SenderError('Offer is not available');
-  // Re-validate the hard constraints so a bad agent pick can never violate them.
-  if (c.hasPets && !offer.acceptsPets) throw new SenderError('Offer does not accept pets');
-  if (c.vulnerabilityFlag && !offer.accessible) throw new SenderError('Offer is not accessible');
-
-  const capacity = offer.capacity - 1;
-  ctx.db.shelterOffer.id.update({ ...offer, capacity, status: capacity === 0 ? 'full' : 'open' });
-  ctx.db.missingCase.id.update({
-    ...c,
-    matchedOffer: offer.id,
-    handoffNote: a.note.trim().slice(0, 500),
-    matchSource: a.source,
-    updatedAt: ctx.timestamp,
-  });
-}
-
-function releaseMatch(ctx: Ctx, offerId: bigint | undefined) {
-  if (offerId === undefined) return;
-  const offer = ctx.db.shelterOffer.id.find(offerId);
-  if (offer) ctx.db.shelterOffer.id.update({ ...offer, capacity: offer.capacity + 1, status: 'open' });
-}
-
-// ---------------------------------------------------------------------------------------------
 // Scan: silent users in severe zones -> missing cases, urgency score, nearest center, alert
 // ---------------------------------------------------------------------------------------------
 
@@ -241,15 +186,13 @@ export function runScan(ctx: Ctx): ScanResult {
 
     const silentMinutes = minutesBetweenMicros(now, lp.timestamp.microsSinceUnixEpoch);
 
-    // Heartbeat is back: close the case and free any shelter spot.
+    // Heartbeat is back: close the case.
     if (silentMinutes < SILENCE_THRESHOLD_MIN) {
       if (active) {
-        releaseMatch(ctx, active.matchedOffer);
         ctx.db.missingCase.id.update({
           ...active,
           status: 'resolved',
           silentMinutes,
-          matchedOffer: undefined,
           updatedAt: ctx.timestamp,
         });
         result.resolved++;
@@ -303,9 +246,6 @@ export function runScan(ctx: Ctx): ScanResult {
       status: 'open',
       assignedCenter: near?.item.id,
       centerDistanceKm: near ? Math.round(near.km * 100) / 100 : -1,
-      matchedOffer: undefined,
-      handoffNote: '',
-      matchSource: '',
       openedAt: ctx.timestamp,
       updatedAt: ctx.timestamp,
     });
@@ -381,7 +321,6 @@ export function resetDemo(ctx: Ctx) {
   for (const id of [...ctx.db.newsItem.iter()].map(r => r.id)) ctx.db.newsItem.id.delete(id);
   for (const id of [...ctx.db.zone.iter()].map(r => r.id)) ctx.db.zone.id.delete(id);
   for (const id of [...ctx.db.emergencyCenter.iter()].map(r => r.id)) ctx.db.emergencyCenter.id.delete(id);
-  for (const id of [...ctx.db.shelterOffer.iter()].map(r => r.id)) ctx.db.shelterOffer.id.delete(id);
   for (const p of [...ctx.db.userProfile.iter()]) {
     if (!p.isSynthetic) continue;
     ctx.db.locationPing.user.delete(p.identity);
@@ -408,9 +347,6 @@ export function loadSeed(ctx: Ctx) {
     ctx.db.newsItem.insert({ id: 0n, area: n.area, text: n.text, timestamp: minutesAgo(ctx, n.minutesAgo), isSynthetic: true });
   }
   for (const c of data.centers) ctx.db.emergencyCenter.insert({ ...c, isSynthetic: true });
-  for (const s of data.shelters) {
-    ctx.db.shelterOffer.insert({ id: 0n, owner: ctx.sender, ...s, status: 'open', isSynthetic: true });
-  }
   for (const u of data.users) {
     const identity = new Identity(syntheticIdentityValue(u.index));
     ctx.db.userProfile.insert({

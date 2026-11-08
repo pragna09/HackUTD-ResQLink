@@ -62,25 +62,6 @@ export const setRationale = spacetimedb.reducer(
 
 export const acknowledgeAlert = spacetimedb.reducer({ alertId: t.u64() }, (ctx, args) => h.acknowledgeAlert(ctx, args));
 
-// Shelters -----------------------------------------------------------------------------------------
-
-export const registerShelter = spacetimedb.reducer(
-  {
-    hostName: t.string(),
-    lat: t.f64(),
-    lng: t.f64(),
-    capacity: t.u32(),
-    acceptsPets: t.bool(),
-    accessible: t.bool(),
-  },
-  (ctx, args) => h.registerShelter(ctx, args)
-);
-
-export const setMatch = spacetimedb.reducer(
-  { caseId: t.u64(), offerId: t.u64(), note: t.string(), source: t.string() },
-  (ctx, args) => h.setMatch(ctx, args)
-);
-
 // Scheduled scan --------------------------------------------------------------------------------------
 
 /** Runs every SCAN_INTERVAL_SEC via the scan_schedule table. Scheduled reducers are private in 2.x. */

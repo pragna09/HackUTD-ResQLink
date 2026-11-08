@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { Case, Center, Offer, Ping, Zone } from '../stdb/types';
+import type { Case, Center, Ping, Zone } from '../stdb/types';
 import { severityColor, urgencyColor } from './format';
 
 interface Props {
@@ -11,7 +11,6 @@ interface Props {
   cases: Case[];
   pings: Ping[];
   centers: Center[];
-  offers: Offer[];
   selectedId: string | null;
   onSelect: (id: string) => void;
 }
@@ -20,7 +19,7 @@ const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 /** Plain Leaflet inside React: the map is created once; each layer group is redrawn when its data changes. */
-export function MapView({ zones, focusZone, cases, pings, centers, offers, selectedId, onSelect }: Props) {
+export function MapView({ zones, focusZone, cases, pings, centers, selectedId, onSelect }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layers = useRef<Record<string, L.LayerGroup>>({});
@@ -31,7 +30,7 @@ export function MapView({ zones, focusZone, cases, pings, centers, offers, selec
     if (!el.current || map.current) return;
     const m = L.map(el.current, { zoomControl: true, preferCanvas: true }).setView([32.7705, -96.8265], 12);
     L.tileLayer(TILE_URL, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(m);
-    for (const k of ['zones', 'pings', 'centers', 'offers', 'links', 'cases']) layers.current[k] = L.layerGroup().addTo(m);
+    for (const k of ['zones', 'pings', 'centers', 'links', 'cases']) layers.current[k] = L.layerGroup().addTo(m);
     map.current = m;
     const ro = new ResizeObserver(() => m.invalidateSize());
     ro.observe(el.current);
@@ -100,19 +99,6 @@ export function MapView({ zones, focusZone, cases, pings, centers, offers, selec
   }, [centers]);
 
   useEffect(() => {
-    const g = layers.current.offers;
-    if (!g) return;
-    g.clearLayers();
-    for (const o of offers) {
-      L.marker([o.lat, o.lng], {
-        icon: L.divIcon({ className: '', html: `<div class="mk-shelter${o.status === 'full' ? ' full' : ''}">${o.capacity}</div>`, iconSize: [18, 18] }),
-      })
-        .bindTooltip(`${o.hostName} · ${o.capacity} spots${o.acceptsPets ? ' · pets ok' : ''}${o.accessible ? ' · accessible' : ''}`)
-        .addTo(g);
-    }
-  }, [offers]);
-
-  useEffect(() => {
     const g = layers.current.cases;
     const links = layers.current.links;
     if (!g || !links) return;
@@ -137,11 +123,9 @@ export function MapView({ zones, focusZone, cases, pings, centers, offers, selec
         const center = centers.find(x => x.id === c.assignedCenter);
         if (center)
           L.polyline([[c.lastLat, c.lastLng], [center.lat, center.lng]], { color: '#2c5ba8', weight: 2, dashArray: '4 6' }).addTo(links);
-        const offer = offers.find(o => o.id === c.matchedOffer);
-        if (offer) L.polyline([[c.lastLat, c.lastLng], [offer.lat, offer.lng]], { color: '#2f7d6d', weight: 2, dashArray: '2 5' }).addTo(links);
       }
     }
-  }, [cases, centers, offers, selectedId]);
+  }, [cases, centers, selectedId]);
 
   // Focus the selected pin.
   useEffect(() => {

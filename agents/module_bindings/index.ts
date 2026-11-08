@@ -37,10 +37,8 @@ import {
 import AcknowledgeAlertReducer from "./acknowledge_alert_reducer";
 import CreateNewsItemReducer from "./create_news_item_reducer";
 import PingReducer from "./ping_reducer";
-import RegisterShelterReducer from "./register_shelter_reducer";
 import RequestResearchReducer from "./request_research_reducer";
 import ResetDemoReducer from "./reset_demo_reducer";
-import SetMatchReducer from "./set_match_reducer";
 import SetRationaleReducer from "./set_rationale_reducer";
 import SilenceUsersReducer from "./silence_users_reducer";
 import SimulateDisasterReducer from "./simulate_disaster_reducer";
@@ -55,7 +53,6 @@ import EmergencyCenterRow from "./emergency_center_table";
 import LocationPingRow from "./location_ping_table";
 import MissingCaseRow from "./missing_case_table";
 import NewsItemRow from "./news_item_table";
-import ShelterOfferRow from "./shelter_offer_table";
 import UserProfileRow from "./user_profile_table";
 import ZoneRow from "./zone_table";
 
@@ -127,17 +124,6 @@ const tablesSchema = __schema({
       { name: 'news_item_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, NewsItemRow),
-  shelterOffer: __table({
-    name: 'shelter_offer',
-    indexes: [
-      { accessor: 'id', name: 'shelter_offer_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
-      ] },
-    ],
-    constraints: [
-      { name: 'shelter_offer_id_key', constraint: 'unique', columns: ['id'] },
-    ],
-  }, ShelterOfferRow),
   userProfile: __table({
     name: 'user_profile',
     indexes: [
@@ -167,10 +153,8 @@ const reducersSchema = __reducers(
   __reducerSchema("acknowledge_alert", AcknowledgeAlertReducer),
   __reducerSchema("create_news_item", CreateNewsItemReducer),
   __reducerSchema("ping", PingReducer),
-  __reducerSchema("register_shelter", RegisterShelterReducer),
   __reducerSchema("request_research", RequestResearchReducer),
   __reducerSchema("reset_demo", ResetDemoReducer),
-  __reducerSchema("set_match", SetMatchReducer),
   __reducerSchema("set_rationale", SetRationaleReducer),
   __reducerSchema("silence_users", SilenceUsersReducer),
   __reducerSchema("simulate_disaster", SimulateDisasterReducer),

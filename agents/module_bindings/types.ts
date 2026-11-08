@@ -60,9 +60,6 @@ export const MissingCase = __t.object("MissingCase", {
   status: __t.string(),
   assignedCenter: __t.option(__t.u32()),
   centerDistanceKm: __t.f64(),
-  matchedOffer: __t.option(__t.u64()),
-  handoffNote: __t.string(),
-  matchSource: __t.string(),
   openedAt: __t.timestamp(),
   updatedAt: __t.timestamp(),
 });
@@ -82,20 +79,6 @@ export const ScanSchedule = __t.object("ScanSchedule", {
   scheduledAt: __t.scheduleAt(),
 });
 export type ScanSchedule = __Infer<typeof ScanSchedule>;
-
-export const ShelterOffer = __t.object("ShelterOffer", {
-  id: __t.u64(),
-  owner: __t.identity(),
-  hostName: __t.string(),
-  lat: __t.f64(),
-  lng: __t.f64(),
-  capacity: __t.u32(),
-  acceptsPets: __t.bool(),
-  accessible: __t.bool(),
-  status: __t.string(),
-  isSynthetic: __t.bool(),
-});
-export type ShelterOffer = __Infer<typeof ShelterOffer>;
 
 export const UserProfile = __t.object("UserProfile", {
   identity: __t.identity(),
