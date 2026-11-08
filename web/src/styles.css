@@ -131,8 +131,10 @@ a { color: inherit; }
 .empty strong { display: block; color: var(--ink-2); margin-bottom: 4px; }
 
 /* ---------- Dashboard ---------- */
-.dash { display: flex; flex-direction: column; height: 100vh; }
-.dash > .dash-main { flex: 1; }
+.dash { display: flex; flex-direction: column; min-height: 100vh; }
+/* Queue, map and case detail fill the screen under the top bar + counters; the footer notes sit below the fold (scroll to see). */
+.dash > .dash-main { flex: none; height: calc(100vh - 150px); min-height: 520px; }
+.foot { border-top: 1px solid var(--line-2); margin-top: 4px; }
 .dash-strip { display: flex; align-items: stretch; gap: 12px; padding: 14px 20px 0; flex-wrap: wrap; }
 .counter { min-width: 140px; padding: 10px 14px; display: grid; gap: 2px; }
 .counter .n { font: 600 28px/1 var(--mono); }
@@ -197,6 +199,7 @@ a { color: inherit; }
 
 @media (max-width: 1180px) {
   .dash { height: auto; min-height: 100vh; }
+  .dash > .dash-main { height: auto; }
   .dash-main { grid-template-columns: 1fr; }
   .map-wrap { height: 420px; }
   .queue { max-height: 520px; }
