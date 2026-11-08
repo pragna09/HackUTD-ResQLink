@@ -152,6 +152,29 @@ export function acknowledgeAlert(ctx: Ctx, a: { alertId: bigint }) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Agent settings (dashboard -> agents worker)
+// ---------------------------------------------------------------------------------------------
+
+export const LLM_PROVIDERS = ['gemini', 'nvidia'] as const;
+export const DEFAULT_LLM_PROVIDER = 'gemini';
+const CONFIG_ID = 0;
+
+/** Dashboard model picker. The agents worker watches agent_config and switches every agent to this provider. */
+export function setLlmProvider(ctx: Ctx, a: { provider: string }) {
+  if (!(LLM_PROVIDERS as readonly string[]).includes(a.provider)) throw new SenderError('provider must be gemini or nvidia');
+  const row = { id: CONFIG_ID, llmProvider: a.provider, updatedAt: ctx.timestamp };
+  if (ctx.db.agentConfig.id.find(CONFIG_ID)) ctx.db.agentConfig.id.update(row);
+  else ctx.db.agentConfig.insert(row);
+}
+
+/** Create the settings row once. reset_demo keeps whatever model the operator picked. */
+function ensureAgentConfig(ctx: Ctx) {
+  if (!ctx.db.agentConfig.id.find(CONFIG_ID)) {
+    ctx.db.agentConfig.insert({ id: CONFIG_ID, llmProvider: DEFAULT_LLM_PROVIDER, updatedAt: ctx.timestamp });
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Scan: silent users in severe zones -> missing cases, urgency score, nearest center, alert
 // ---------------------------------------------------------------------------------------------
 
@@ -370,6 +393,7 @@ export function loadSeed(ctx: Ctx) {
     });
   }
   ensureSchedule(ctx);
+  ensureAgentConfig(ctx);
 }
 
 export function ensureSchedule(ctx: Ctx) {

@@ -157,9 +157,15 @@ export function createMockBackend(): Backend {
     },
     async resetDemo() {
       const mine = { p: data.profiles.get(ME), l: data.pings.get(ME) };
+      const provider = data.llmProvider; // like the real module, reset keeps the picked model
       data = seed();
+      data.llmProvider = provider;
       if (mine.p) data.profiles.set(ME, mine.p);
       if (mine.l) data.pings.set(ME, mine.l);
+      emit();
+    },
+    async setLlmProvider(provider) {
+      data.llmProvider = provider;
       emit();
     },
     async acknowledgeAlert(alertId) {

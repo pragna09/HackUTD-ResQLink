@@ -7,7 +7,10 @@ Snapshot: 2026-11-07, end of build session 1. Environment: Windows 11, Node 22.1
 - **Shelters removed everywhere**: `shelter_offer` table, `register_shelter` / `set_match` reducers, the Shelter agent, the
   `/volunteer` page, shelter fields on `missing_case`, map markers and dashboard panels. Older notes below still mention them.
 - Seed is now three scenarios (Dallas earthquake, LA fire, Miami flood), 10 people each; the dashboard's Simulate disaster is a dropdown.
-- Weather Research runs on NVIDIA Nemotron (`WEATHER_PROVIDER=nvidia`, `nemotron-3-nano-omni-30b-a3b-reasoning`); triage stays on Gemini.
+- **AI model picker on the dashboard** (Gemini / NVIDIA Nemotron). It writes `agent_config.llmProvider` via `set_llm_provider`;
+  the worker switches Weather Research and Triage together within ~0.2 s. `LLM_PROVIDER` is only the starting value. Nemotron is
+  `nemotron-3-nano-omni-30b-a3b-reasoning` with thinking disabled (`chat_template_kwargs.enable_thinking=false`); without that it
+  ran out of tokens on 6-case triage batches. Verified live: both models write triage reasons and weather ratings (`source=llm`).
 
 ## Completed (verified in this session)
 

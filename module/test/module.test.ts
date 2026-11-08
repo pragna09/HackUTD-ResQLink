@@ -161,6 +161,17 @@ describe('welfare-check module', () => {
     expect(() => tx(ctx => h.setRationale(ctx, { caseId: c.id, rationale: 'x', source: 'made-up' }))).toThrow();
   });
 
+  it('set_llm_provider switches the model the agents use and survives reset_demo', () => {
+    const { harness, tx } = setup();
+    expect(harness.db.agentConfig.id.find(0)!.llmProvider).toBe('gemini');
+    tx(ctx => h.setLlmProvider(ctx, { provider: 'nvidia' }));
+    expect(harness.db.agentConfig.id.find(0)!.llmProvider).toBe('nvidia');
+    expect(() => tx(ctx => h.setLlmProvider(ctx, { provider: 'gpt' }))).toThrow();
+    tx(ctx => h.resetDemo(ctx));
+    expect(harness.db.agentConfig.count()).toBe(1n);
+    expect(harness.db.agentConfig.id.find(0)!.llmProvider).toBe('nvidia');
+  });
+
   it('acknowledge_alert updates alert and case', () => {
     const { harness, tx } = setup();
     tx(ctx => h.simulateDisaster(ctx, { zoneId: DEMO_ZONE.id, severity: 4 }));

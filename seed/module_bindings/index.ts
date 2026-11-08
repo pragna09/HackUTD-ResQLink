@@ -39,6 +39,7 @@ import CreateNewsItemReducer from "./create_news_item_reducer";
 import PingReducer from "./ping_reducer";
 import RequestResearchReducer from "./request_research_reducer";
 import ResetDemoReducer from "./reset_demo_reducer";
+import SetLlmProviderReducer from "./set_llm_provider_reducer";
 import SetRationaleReducer from "./set_rationale_reducer";
 import SilenceUsersReducer from "./silence_users_reducer";
 import SimulateDisasterReducer from "./simulate_disaster_reducer";
@@ -48,6 +49,7 @@ import UpsertZoneReducer from "./upsert_zone_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AgentConfigRow from "./agent_config_table";
 import AlertRow from "./alert_table";
 import EmergencyCenterRow from "./emergency_center_table";
 import LocationPingRow from "./location_ping_table";
@@ -60,6 +62,17 @@ import ZoneRow from "./zone_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  agentConfig: __table({
+    name: 'agent_config',
+    indexes: [
+      { accessor: 'id', name: 'agent_config_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'agent_config_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, AgentConfigRow),
   alert: __table({
     name: 'alert',
     indexes: [
@@ -155,6 +168,7 @@ const reducersSchema = __reducers(
   __reducerSchema("ping", PingReducer),
   __reducerSchema("request_research", RequestResearchReducer),
   __reducerSchema("reset_demo", ResetDemoReducer),
+  __reducerSchema("set_llm_provider", SetLlmProviderReducer),
   __reducerSchema("set_rationale", SetRationaleReducer),
   __reducerSchema("silence_users", SilenceUsersReducer),
   __reducerSchema("simulate_disaster", SimulateDisasterReducer),

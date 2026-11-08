@@ -3,7 +3,7 @@
 //   Triage:           for every open case with an empty rationale (batched).
 // Run: npm run dev   (in /agents)
 import { env } from './config';
-import { llm, weatherLlm } from './llm';
+import { getActiveProvider, isProvider, llm, llmFor, setActiveProvider } from './llm';
 import { fetchActiveAlerts } from './nws';
 import { connectStdb, type Stdb } from './stdb';
 import { runTriage } from './triage';
@@ -14,7 +14,7 @@ async function researchZone(db: Stdb, zone: ZoneRow) {
   const nws = await fetchActiveAlerts(zone.centerLat, zone.centerLng);
   const news = db.news(zone.id);
   console.log(`[weather] ${zone.id}: ${nws.alerts.length} NWS alerts${nws.ok ? '' : ` (NWS error: ${nws.error})`}, ${news.length} news items`);
-  const res = await runWeatherResearch({ zone, news, nwsAlerts: nws.alerts, nwsError: nws.error }, weatherLlm());
+  const res = await runWeatherResearch({ zone, news, nwsAlerts: nws.alerts, nwsError: nws.error });
   await db.upsertZone({
     id: zone.id,
     name: zone.name,
@@ -28,19 +28,25 @@ async function researchZone(db: Stdb, zone: ZoneRow) {
 }
 
 async function main() {
-  const client = llm();
-  console.log(
-    `[agents] provider=${client.adapter.name} model=${client.adapter.model} ` +
-      (client.adapter.available && !env.LLM_FORCE_FALLBACK ? 'LIVE' : `FALLBACK ONLY (${env.LLM_FORCE_FALLBACK ? 'LLM_FORCE_FALLBACK=1' : client.adapter.unavailableReason})`)
-  );
-  const wx = weatherLlm();
-  if (wx !== client) {
-    console.log(
-      `[agents] weather provider=${wx.adapter.name} model=${wx.adapter.model} ` +
-        (wx.adapter.available ? 'LIVE' : `FALLBACK ONLY (${wx.adapter.unavailableReason})`)
-    );
-  }
+  const describe = (p: 'gemini' | 'nvidia') => {
+    const a = llmFor(p).adapter;
+    const live = a.available && !env.LLM_FORCE_FALLBACK;
+    return `${a.name} (${a.model}) ${live ? 'LIVE' : `FALLBACK ONLY (${env.LLM_FORCE_FALLBACK ? 'LLM_FORCE_FALLBACK=1' : a.unavailableReason})`}`;
+  };
+  console.log(`[agents] available models: ${describe('gemini')} | ${describe('nvidia')}`);
   const db = await connectStdb();
+
+  // ---- Model picker --------------------------------------------------------------------------
+  // The dashboard writes agent_config.llmProvider; every agent (weather + triage) follows it.
+  const syncProvider = () => {
+    const wanted = db.llmProvider();
+    if (!isProvider(wanted) || wanted === getActiveProvider()) return;
+    setActiveProvider(wanted);
+    console.log(`[agents] dashboard switched all agents to ${describe(wanted)}`);
+  };
+  syncProvider();
+  console.log(`[agents] active model: ${describe(getActiveProvider())}`);
+  db.onChange('agent_config', syncProvider);
 
   // ---- Weather -------------------------------------------------------------------------------
   const weatherBusy = new Set<string>();
@@ -102,8 +108,8 @@ async function main() {
   setInterval(kick, 30_000);
 
   setInterval(() => {
-    const s = client.stats;
-    console.log(`[agents] llm calls=${s.calls} cacheHits=${s.cacheHits} fallbacks=${s.fallbacks}`);
+    const s = llm().stats;
+    console.log(`[agents] ${getActiveProvider()} llm calls=${s.calls} cacheHits=${s.cacheHits} fallbacks=${s.fallbacks}`);
   }, 5 * 60_000);
 }
 

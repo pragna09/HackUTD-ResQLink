@@ -58,6 +58,8 @@ function readSnapshot(conn: any): Snapshot {
     });
   for (const r of conn.db.alert.iter())
     s.alerts.push({ id: String(r.id), caseId: String(r.caseId), centerId: r.centerId, message: r.message, status: r.status, at: date(r.timestamp) });
+  const cfg = conn.db.agentConfig.id.find(0);
+  if (cfg) s.llmProvider = cfg.llmProvider;
   return s;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -102,7 +104,7 @@ export function createLiveBackend(): Backend {
       conn = c;
       saveToken(token);
       set({ identity: identity.toHexString() });
-      const tables = [c.db.userProfile, c.db.locationPing, c.db.zone, c.db.newsItem, c.db.emergencyCenter, c.db.missingCase, c.db.alert];
+      const tables = [c.db.userProfile, c.db.locationPing, c.db.zone, c.db.newsItem, c.db.emergencyCenter, c.db.missingCase, c.db.alert, c.db.agentConfig];
       for (const t of tables as Array<{ onInsert: (cb: () => void) => void; onDelete: (cb: () => void) => void; onUpdate?: (cb: () => void) => void }>) {
         t.onInsert(refresh);
         t.onDelete(refresh);
@@ -121,6 +123,7 @@ export function createLiveBackend(): Backend {
           'SELECT * FROM emergency_center',
           'SELECT * FROM missing_case',
           'SELECT * FROM alert',
+          'SELECT * FROM agent_config',
         ]);
     })
     .onAutomaticReconnect((_c, identity) => set({ status: 'live', identity: identity.toHexString() }))
@@ -141,6 +144,7 @@ export function createLiveBackend(): Backend {
     silenceUsers: async (zoneId, count) => need().reducers.silenceUsers({ zoneId, count }),
     resetDemo: async () => need().reducers.resetDemo({}),
     acknowledgeAlert: async alertId => need().reducers.acknowledgeAlert({ alertId: BigInt(alertId) }),
+    setLlmProvider: async provider => need().reducers.setLlmProvider({ provider }),
   };
 
   return { mode: 'spacetimedb', api, subscribe: cb => (listeners.add(cb), () => listeners.delete(cb)), getState: () => state };

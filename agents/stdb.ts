@@ -11,10 +11,12 @@ const TOKEN_FILE = resolve(AGENTS_DIR, '.token');
 
 export interface Stdb {
   zones(): ZoneRow[];
+  /** Model picked on the dashboard ('gemini' | 'nvidia'), or undefined before the row exists. */
+  llmProvider(): string | undefined;
   news(area: string): NewsRow[];
   cases(): CaseRow[];
   /** Fires on any insert/update/delete in the named table. */
-  onChange(table: 'zone' | 'missing_case' | 'news_item', cb: () => void): void;
+  onChange(table: 'zone' | 'missing_case' | 'news_item' | 'agent_config', cb: () => void): void;
   upsertZone(a: {
     id: string;
     name: string;
@@ -94,6 +96,7 @@ export function connectStdb(): Promise<Stdb> {
             'SELECT * FROM zone',
             'SELECT * FROM news_item',
             'SELECT * FROM missing_case',
+            'SELECT * FROM agent_config',
           ]);
       })
       .onConnectError((_ctx, err) => {
@@ -119,10 +122,12 @@ function wrap(conn: DbConnection, identityHex: string): Stdb {
   watch('zone', conn.db.zone);
   watch('news_item', conn.db.newsItem);
   watch('missing_case', conn.db.missingCase);
+  watch('agent_config', conn.db.agentConfig);
 
   return {
     identityHex,
     zones: () => [...conn.db.zone.iter()].map(toZone),
+    llmProvider: () => conn.db.agentConfig.id.find(0)?.llmProvider,
     news: area => [...conn.db.newsItem.iter()].filter(n => n.area === area).map(toNews),
     cases: () => [...conn.db.missingCase.iter()].map(toCase),
     onChange: (t, cb) => void (listeners[t] ??= []).push(cb),

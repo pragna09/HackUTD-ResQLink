@@ -68,7 +68,7 @@ export function Dashboard() {
       <div className="dash-strip">
         <Counter cls="flag" n={offline ? null : counters.flagged} label="Flagged" loading={loading} />
         <Counter cls="alert" n={offline ? null : counters.alerted} label={`Alerted · ${counters.acknowledged} ack`} loading={loading} />
-        <DemoControls zone={zone} zones={data.zones} onShowZone={showZone} run={run} disabled={!zone} />
+        <DemoControls zone={zone} zones={data.zones} llmProvider={data.llmProvider} onShowZone={showZone} run={run} disabled={!zone} />
       </div>
 
       <main className="dash-main">
@@ -166,14 +166,21 @@ function Counter({ n, label, cls, loading }: { n: number | null; label: string; 
 /** Severity the scenario dropdown sets. Scanning starts at MIN_SEVERITY_FOR_SCAN (3). */
 const SIMULATED_SEVERITY = 4;
 
+/** Models the agents worker can use. Code still computes every score, distance and nearest center. */
+const AI_MODELS = [
+  { id: 'gemini', label: 'Gemini' },
+  { id: 'nvidia', label: 'NVIDIA Nemotron' },
+];
+
 function DemoControls(props: {
   zone?: Zone;
   zones: Zone[];
+  llmProvider: string;
   onShowZone: (id: string) => void;
   run: (l: string, f: () => Promise<void>) => void;
   disabled: boolean;
 }) {
-  const { zone, zones, onShowZone, run, disabled } = props;
+  const { zone, zones, llmProvider, onShowZone, run, disabled } = props;
   const api = useApi();
   // One entry per seeded scenario present in the database, in seed order (Dallas, LA, Miami).
   const scenarios = ZONES.filter(s => zones.some(z => z.id === s.id)).map(s => ({
@@ -184,6 +191,23 @@ function DemoControls(props: {
   const researching = zone?.researchStatus === 'requested';
   return (
     <div className="panel controls" aria-label="Demo controls">
+      <span className="lbl">AI model</span>
+      <select
+        aria-label="AI model used by every agent"
+        title="Model used by the Weather Research and Triage agents"
+        value={llmProvider}
+        disabled={disabled}
+        onChange={e => {
+          const m = AI_MODELS.find(x => x.id === e.target.value);
+          if (m) run(`All agents now use ${m.label}`, () => api.setLlmProvider(m.id));
+        }}
+      >
+        {AI_MODELS.map(m => (
+          <option key={m.id} value={m.id}>
+            {m.label}
+          </option>
+        ))}
+      </select>
       <span className="lbl">Demo</span>
       <button
         className="btn primary"

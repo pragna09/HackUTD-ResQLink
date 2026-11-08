@@ -129,6 +129,19 @@ export const alert = table(
   }
 );
 
+/**
+ * Single row (id 0) of settings the dashboard can change and the agents worker follows.
+ * llmProvider picks the model every agent uses: 'gemini' | 'nvidia' (Nemotron).
+ */
+export const agentConfig = table(
+  { name: 'agent_config', public: true },
+  {
+    id: t.u32().primaryKey(),
+    llmProvider: t.string(),
+    updatedAt: t.timestamp(),
+  }
+);
+
 /** Private schedule table driving scan_for_missing. */
 export const scanSchedule = table(
   { name: 'scan_schedule' },
@@ -146,6 +159,7 @@ const spacetimedb = schema({
   emergencyCenter,
   missingCase,
   alert,
+  agentConfig,
   scanSchedule,
 });
 

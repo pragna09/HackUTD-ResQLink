@@ -62,6 +62,9 @@ export const setRationale = spacetimedb.reducer(
 
 export const acknowledgeAlert = spacetimedb.reducer({ alertId: t.u64() }, (ctx, args) => h.acknowledgeAlert(ctx, args));
 
+/** Dashboard model picker: 'gemini' | 'nvidia'. Every agent follows it. */
+export const setLlmProvider = spacetimedb.reducer({ provider: t.string() }, (ctx, args) => h.setLlmProvider(ctx, args));
+
 // Scheduled scan --------------------------------------------------------------------------------------
 
 /** Runs every SCAN_INTERVAL_SEC via the scan_schedule table. Scheduled reducers are private in 2.x. */

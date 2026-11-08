@@ -95,6 +95,8 @@ export interface Snapshot {
   centers: Center[];
   cases: Case[];
   alerts: Alert[];
+  /** Model every agent uses, picked on the dashboard: 'gemini' | 'nvidia'. */
+  llmProvider: string;
 }
 
 export const emptySnapshot = (): Snapshot => ({
@@ -105,6 +107,7 @@ export const emptySnapshot = (): Snapshot => ({
   centers: [],
   cases: [],
   alerts: [],
+  llmProvider: 'gemini',
 });
 
 /** Reducer calls the UI can make. IDs are strings in the UI and converted to bigint at the edge. */
@@ -116,6 +119,7 @@ export interface Api {
   silenceUsers(zoneId: string, count: number): Promise<void>;
   resetDemo(): Promise<void>;
   acknowledgeAlert(alertId: string): Promise<void>;
+  setLlmProvider(provider: string): Promise<void>;
 }
 
 export type ConnStatus = 'connecting' | 'live' | 'error' | 'disconnected';

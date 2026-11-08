@@ -17,15 +17,11 @@ const num = (k: string, d: number) => {
 };
 
 export const env = {
+  /** Starting provider. Once connected, the worker follows the dashboard's model picker (agent_config). */
   LLM_PROVIDER: (str('LLM_PROVIDER', 'gemini').toLowerCase() === 'nvidia' ? 'nvidia' : 'gemini') as 'gemini' | 'nvidia',
   GEMINI_API_KEY: str('GEMINI_API_KEY'),
   GEMINI_MODEL: str('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
   NVIDIA_API_KEY: str('NVIDIA_API_KEY'),
-  /** Optional provider for the Weather Research agent only (weather + news). Empty = same as LLM_PROVIDER. */
-  WEATHER_PROVIDER: (() => {
-    const v = str('WEATHER_PROVIDER').toLowerCase();
-    return v === 'nvidia' || v === 'gemini' ? v : undefined;
-  })() as 'gemini' | 'nvidia' | undefined,
   // nemotron-3-super-120b-a12b is listed in the catalog but returns 404 for free accounts (checked 2026-11-08).
   NVIDIA_MODEL: str('NVIDIA_MODEL', 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'),
   NVIDIA_BASE_URL: 'https://integrate.api.nvidia.com/v1',

@@ -78,11 +78,16 @@ export function nvidiaAdapter(apiKey = env.NVIDIA_API_KEY, model = env.NVIDIA_MO
     async complete(system, prompt, jsonSchema) {
       const { default: OpenAI } = await import('openai');
       const client = new OpenAI({ apiKey, baseURL: env.NVIDIA_BASE_URL });
-      const res = await client.chat.completions.create({
+      // chat_template_kwargs is an NVIDIA extension the OpenAI types don't know about. Turning thinking
+      // off stops reasoning models (nemotron-*-reasoning) spending the whole token budget before the JSON;
+      // checked against nemotron-3-nano-omni-30b-a3b-reasoning on 2026-11-08.
+      const body: import('openai').OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & {
+        chat_template_kwargs?: { enable_thinking: boolean };
+      } = {
         model,
         temperature: 0.6,
         top_p: 0.95,
-        max_tokens: 1024,
+        max_tokens: 2048,
         messages: [
           {
             role: 'system',
@@ -92,7 +97,9 @@ export function nvidiaAdapter(apiKey = env.NVIDIA_API_KEY, model = env.NVIDIA_MO
           },
           { role: 'user', content: prompt },
         ],
-      });
+        chat_template_kwargs: { enable_thinking: false },
+      };
+      const res = await client.chat.completions.create(body);
       return res.choices[0]?.message?.content ?? '';
     },
   };
@@ -241,37 +248,40 @@ export function createLlm(opts: {
   return { adapter, generateJson, stats };
 }
 
-let defaultClient: LlmClient | undefined;
-let weatherClient: LlmClient | undefined;
-// One file cache for every client in the process, so two clients never overwrite each other's entries.
-// Keys include provider + model, so entries never cross providers.
+export type Provider = 'gemini' | 'nvidia';
+export const isProvider = (v: unknown): v is Provider => v === 'gemini' || v === 'nvidia';
+
+// One client per provider, created on first use. They share one file cache (keys include provider +
+// model, so entries never cross providers) so two clients never overwrite each other's entries.
+const clients = new Map<Provider, LlmClient>();
 let sharedCache: Cache | undefined;
 const processCache = () => (sharedCache ??= fileCache());
 
-/**
- * Client for the Weather Research agent (weather alerts + news). Uses WEATHER_PROVIDER when set
- * (e.g. Nemotron for weather while Gemini handles triage), otherwise the default client.
- */
-export function weatherLlm(): LlmClient {
-  if (!env.WEATHER_PROVIDER || env.WEATHER_PROVIDER === env.LLM_PROVIDER) return llm();
-  weatherClient ??= createLlm({
-    adapter: adapterFromEnv(env.WEATHER_PROVIDER),
-    cache: processCache(),
-    minIntervalMs: env.LLM_MIN_INTERVAL_MS,
-    forceFallback: env.LLM_FORCE_FALLBACK,
-    log: m => console.log(m),
-  });
-  return weatherClient;
+/** Client for a specific provider. */
+export function llmFor(provider: Provider): LlmClient {
+  let c = clients.get(provider);
+  if (!c) {
+    c = createLlm({
+      adapter: adapterFromEnv(provider),
+      cache: processCache(),
+      minIntervalMs: env.LLM_MIN_INTERVAL_MS,
+      forceFallback: env.LLM_FORCE_FALLBACK,
+      log: m => console.log(m),
+    });
+    clients.set(provider, c);
+  }
+  return c;
 }
 
-/** Process-wide client configured from the environment. */
+// The provider every agent uses. Starts at LLM_PROVIDER; the worker switches it when the dashboard
+// changes agent_config.llmProvider.
+let activeProvider: Provider = env.LLM_PROVIDER;
+export const getActiveProvider = (): Provider => activeProvider;
+export function setActiveProvider(provider: Provider) {
+  activeProvider = provider;
+}
+
+/** The active client. Weather Research and Triage both call this, so one switch moves every agent. */
 export function llm(): LlmClient {
-  defaultClient ??= createLlm({
-    adapter: adapterFromEnv(),
-    cache: processCache(),
-    minIntervalMs: env.LLM_MIN_INTERVAL_MS,
-    forceFallback: env.LLM_FORCE_FALLBACK,
-    log: m => console.log(m),
-  });
-  return defaultClient;
+  return llmFor(activeProvider);
 }

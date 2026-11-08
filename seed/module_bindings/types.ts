@@ -10,6 +10,13 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AgentConfig = __t.object("AgentConfig", {
+  id: __t.u32(),
+  llmProvider: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type AgentConfig = __Infer<typeof AgentConfig>;
+
 export const Alert = __t.object("Alert", {
   id: __t.u64(),
   caseId: __t.u64(),

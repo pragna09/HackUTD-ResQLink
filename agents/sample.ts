@@ -4,7 +4,7 @@
 //   npm run sample -- --no-nws
 import { buildSeedDataset } from '../module/src/seed_data';
 import { urgencyScore } from '../module/src/logic';
-import { llm, weatherLlm } from './llm';
+import { llm } from './llm';
 import { fetchActiveAlerts, type NwsResult } from './nws';
 import { runTriage } from './triage';
 import { runWeatherResearch } from './weather';
@@ -21,7 +21,7 @@ const nws: NwsResult = process.argv.includes('--no-nws')
   ? { ok: false, alerts: [], error: 'skipped (--no-nws)' }
   : await fetchActiveAlerts(zone.centerLat, zone.centerLng);
 console.log(`NWS: ok=${nws.ok} alerts=${nws.alerts.length}${nws.error ? ` error=${nws.error}` : ''}`);
-const weather = await runWeatherResearch({ zone, news, nwsAlerts: nws.alerts, nwsError: nws.error }, weatherLlm());
+const weather = await runWeatherResearch({ zone, news, nwsAlerts: nws.alerts, nwsError: nws.error });
 console.log('WEATHER', JSON.stringify({ source: weather.source, note: weather.note, ...weather.data }, null, 2), '\n');
 
 // 2. Triage on three synthetic silent users
