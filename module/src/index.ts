@@ -18,7 +18,16 @@ export const init = spacetimedb.init(ctx => {
 // Phone page --------------------------------------------------------------------------------------
 
 export const updateProfile = spacetimedb.reducer(
-  { displayName: t.string(), ageGroup: t.string(), vulnerabilityFlag: t.bool(), hasPets: t.bool(), optIn: t.bool() },
+  {
+    displayName: t.string(),
+    phone: t.string(),
+    ageGroup: t.string(),
+    dependentsChildren: t.u32(),
+    dependentsElderly: t.u32(),
+    needsAccessible: t.bool(),
+    hasPets: t.bool(),
+    optIn: t.bool(),
+  },
   (ctx, args) => h.updateProfile(ctx, args)
 );
 

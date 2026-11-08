@@ -281,6 +281,26 @@ describe('welfare-check module', () => {
     });
   });
 
+  it('update_profile: demo sign-in with household; vulnerability is derived from dependents and accessibility', () => {
+    const { harness, tx } = setup();
+    const base = { displayName: 'Maria G.', phone: '+1 (214) 555-0100', ageGroup: '18-64', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: false, hasPets: false, optIn: false };
+    const save = (patch: Partial<typeof base>) => {
+      let id!: Identity;
+      tx(ctx => {
+        id = ctx.sender;
+        h.updateProfile(ctx, { ...base, ...patch });
+      });
+      return harness.db.userProfile.identity.find(id)!;
+    };
+    expect(save({})).toMatchObject({ vulnerabilityFlag: false, phone: '+1 (214) 555-0100' });
+    expect(save({ dependentsChildren: 2 }).vulnerabilityFlag).toBe(true);
+    expect(save({ dependentsElderly: 1 }).vulnerabilityFlag).toBe(true);
+    expect(save({ needsAccessible: true, hasPets: true })).toMatchObject({ vulnerabilityFlag: true, needsAccessible: true, hasPets: true });
+    expect(() => save({ phone: 'call me' })).toThrow();
+    expect(() => save({ displayName: '  ' })).toThrow();
+    expect(() => save({ dependentsChildren: 21 })).toThrow();
+  });
+
   it('acknowledge_alert updates alert and case', () => {
     const { harness, tx } = setup();
     tx(ctx => h.simulateDisaster(ctx, { zoneId: DEMO_ZONE.id, severity: 4 }));

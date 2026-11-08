@@ -9,6 +9,7 @@ import {
   SILENCE_THRESHOLD_MIN,
   RESPONDER_TYPES,
   isInsideZone,
+  isVulnerable,
   meshSosMessage,
   minutesBetweenMicros,
   nearest,
@@ -33,19 +34,38 @@ const minutesAgo = (ctx: Ctx, minutes: number) =>
 // Phone page
 // ---------------------------------------------------------------------------------------------
 
-export function updateProfile(
-  ctx: Ctx,
-  a: { displayName: string; ageGroup: string; vulnerabilityFlag: boolean; hasPets: boolean; optIn: boolean }
-) {
+export interface ProfileArgs {
+  displayName: string;
+  phone: string;
+  ageGroup: string;
+  dependentsChildren: number;
+  dependentsElderly: number;
+  needsAccessible: boolean;
+  hasPets: boolean;
+  optIn: boolean;
+}
+
+const PHONE_RE = /^\+?[0-9 ()-]{7,20}$/;
+const isCount = (n: number) => Number.isInteger(n) && n >= 0 && n <= 20;
+
+/** Demo sign-in + household profile from the phone screen. The vulnerability flag is derived, never sent. */
+export function updateProfile(ctx: Ctx, a: ProfileArgs) {
   const displayName = a.displayName.trim().slice(0, 60);
-  if (!displayName) throw new SenderError('Display name is required');
+  if (!displayName) throw new SenderError('Name is required');
+  const phone = a.phone.trim();
+  if (!PHONE_RE.test(phone)) throw new SenderError('Enter a valid phone number');
   if (!AGE_GROUPS.has(a.ageGroup)) throw new SenderError('Age group must be 0-17, 18-64 or 65+');
+  if (!isCount(a.dependentsChildren) || !isCount(a.dependentsElderly)) throw new SenderError('Number of dependents must be 0-20');
 
   const row = {
     identity: ctx.sender,
     displayName,
+    phone,
     ageGroup: a.ageGroup,
-    vulnerabilityFlag: a.vulnerabilityFlag,
+    dependentsChildren: a.dependentsChildren,
+    dependentsElderly: a.dependentsElderly,
+    needsAccessible: a.needsAccessible,
+    vulnerabilityFlag: isVulnerable(a),
     hasPets: a.hasPets,
     // The /app form does not ask about Wi-Fi yet; keep any existing value, default to true.
     hasWifi: ctx.db.userProfile.identity.find(ctx.sender)?.hasWifi ?? true,
@@ -395,6 +415,7 @@ export function relayMeshMessages(ctx: Ctx, a: { payload: string }): RelayResult
         displayName: m.displayName.trim() || 'Unknown (mesh)',
         ageGroup: 'unknown',
         vulnerabilityFlag: false,
+        phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: false,
         hasPets: false,
         hasWifi: false,
         optIn: true,
@@ -556,6 +577,8 @@ export function loadSeed(ctx: Ctx) {
       displayName: u.displayName,
       ageGroup: u.ageGroup,
       vulnerabilityFlag: u.vulnerabilityFlag,
+      // Synthetic high-risk people are marked as needing accessibility support so their flag matches the rule.
+      phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: u.vulnerabilityFlag,
       hasPets: u.hasPets,
       hasWifi: u.hasWifi,
       optIn: true,

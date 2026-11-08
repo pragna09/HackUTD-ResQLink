@@ -256,3 +256,26 @@ a { color: inherit; }
 .tile span { color: var(--ink-3); font-size: 13px; }
 @media (max-width: 720px) { .tiles { grid-template-columns: 1fr; } .home h1 { font-size: 30px; } }
 .controls select.simulate { font-weight: 600; cursor: pointer; }
+
+/* ---------- Pinned top bar: tabs stay in place on every page ---------- */
+.topbar { position: sticky; top: 0; z-index: 1000; }
+
+/* ---------- Phone: sign-in + household ---------- */
+.steps { display: flex; gap: 6px; margin-bottom: 12px; }
+.steps span { flex: 1; text-align: center; font-size: 12px; font-weight: 600; padding: 6px 0; border-radius: 999px; background: var(--panel-2); color: var(--ink-3); border: 1px solid var(--line-2); }
+.steps span.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.steps span.done { color: var(--ok); }
+.phone .card h1 { margin-bottom: 4px; }
+.btn.block { width: 100%; height: 42px; }
+.phone .note { margin: 10px 0 0; }
+.hint.bad { color: #b3261e; display: block; margin-top: 4px; }
+.row-btns { display: flex; gap: 8px; }
+.who { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.counter-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.counter-row small { display: block; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none; }
+.stepper button { width: 38px; height: 38px; border: 0; background: var(--panel-2); font-size: 18px; cursor: pointer; }
+.stepper button:disabled { opacity: .4; cursor: default; }
+.stepper output { min-width: 34px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.seg.small-seg { display: inline-grid; flex: none; grid-template-columns: repeat(2, 56px); }
+.seg.small-seg button { height: 34px; }

@@ -12,8 +12,11 @@ import {
 
 export default {
   displayName: __t.string(),
+  phone: __t.string(),
   ageGroup: __t.string(),
-  vulnerabilityFlag: __t.bool(),
+  dependentsChildren: __t.u32(),
+  dependentsElderly: __t.u32(),
+  needsAccessible: __t.bool(),
   hasPets: __t.bool(),
   optIn: __t.bool(),
 };

@@ -11,7 +11,14 @@ export const userProfile = table(
     displayName: t.string(),
     /** '0-17' | '18-64' | '65+' */
     ageGroup: t.string(),
+    /** Derived on save: needsAccessible || any dependents (see isVulnerable). */
     vulnerabilityFlag: t.bool(),
+    /** Demo sign-in: phone number as typed (not verified). '' for synthetic people. */
+    phone: t.string(),
+    /** People in the home who depend on this person. */
+    dependentsChildren: t.u32(),
+    dependentsElderly: t.u32(),
+    needsAccessible: t.bool(),
     /** Shown to responders on the case. */
     hasPets: t.bool(),
     /** Whether the person has Wi-Fi at home. Shown to responders; not part of the urgency score. */

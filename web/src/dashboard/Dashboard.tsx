@@ -19,7 +19,14 @@ export function Dashboard() {
   const [showResolved, setShowResolved] = useState(false);
 
   // The dashboard shows one scenario at a time; "Simulate disaster" switches to the chosen zone.
-  const [zoneId, setZoneId] = useState<string>(DEMO_ZONE.id);
+  // Remembered for this browser tab, so switching to the Phone app and back keeps the same city.
+  const [zoneId, setZoneId] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem('dashboard.zone') ?? DEMO_ZONE.id;
+    } catch {
+      return DEMO_ZONE.id;
+    }
+  });
   const zone: Zone | undefined = data.zones.find(z => z.id === zoneId) ?? data.zones[0];
   const zoneCases = useMemo(() => data.cases.filter(c => c.zoneId === zone?.id), [data.cases, zone?.id]);
   const active = useMemo(
@@ -33,6 +40,11 @@ export function Dashboard() {
   }, [data.alerts, zoneCases]);
   const showZone = (id: string) => {
     setZoneId(id);
+    try {
+      sessionStorage.setItem('dashboard.zone', id);
+    } catch {
+      /* storage blocked: selection just won't persist */
+    }
     setSelectedId(null);
     setMesh(null);
   };
@@ -191,6 +203,7 @@ export function Dashboard() {
           <CaseDetail
             c={selected}
             hasWifi={selected ? data.profiles.get(selected.user)?.hasWifi : undefined}
+            profile={selected ? data.profiles.get(selected.user) : undefined}
             alert={selected ? alertsByCase.get(selected.id) : undefined}
             center={data.centers.find(x => x.id === selected?.assignedCenter)}
             onAck={id => run('Alert acknowledged', () => api.acknowledgeAlert(id))}
@@ -481,8 +494,8 @@ function ZonePanel({ zone, newsCount, loading }: { zone?: Zone; newsCount: numbe
   );
 }
 
-function CaseDetail(props: { c: Case | null; hasWifi?: boolean; alert?: Alert; center?: Center; onAck: (id: string) => void }) {
-  const { c, hasWifi, alert, center, onAck } = props;
+function CaseDetail(props: { c: Case | null; hasWifi?: boolean; profile?: Profile; alert?: Alert; center?: Center; onAck: (id: string) => void }) {
+  const { c, hasWifi, profile, alert, center, onAck } = props;
   if (!c)
     return (
       <section className="panel">
@@ -510,6 +523,20 @@ function CaseDetail(props: { c: Case | null; hasWifi?: boolean; alert?: Alert; c
         <div className="muted small">
           Last heartbeat {ago(c.lastSeen)} · {c.lastLat.toFixed(4)}, {c.lastLng.toFixed(4)}
         </div>
+        {profile && !profile.isSynthetic && (
+          <div className="small" style={{ marginTop: 6 }}>
+            <b>Household:</b>{' '}
+            {[
+              profile.dependentsChildren > 0 && `${profile.dependentsChildren} child${profile.dependentsChildren === 1 ? '' : 'ren'}`,
+              profile.dependentsElderly > 0 && `${profile.dependentsElderly} elderly`,
+              profile.hasPets && 'pets',
+              profile.needsAccessible && 'accessibility needs',
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'lives alone, no pets, no accessibility needs'}
+            {profile.phone && <span className="muted"> · {profile.phone}</span>}
+          </div>
+        )}
         {hasWifi !== undefined && (
           <div className="small" style={{ marginTop: 6 }}>
             <span className={`chip${hasWifi ? '' : ' warn'}`}>{hasWifi ? 'Has Wi-Fi at home' : 'No Wi-Fi at home'}</span>

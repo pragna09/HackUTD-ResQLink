@@ -133,5 +133,10 @@ export function meshSosMessage(args: {
   );
 }
 
+/** A person is vulnerable if they need accessibility support or have children or elderly people depending on them. */
+export function isVulnerable(p: { needsAccessible: boolean; dependentsChildren: number; dependentsElderly: number }): boolean {
+  return p.needsAccessible || p.dependentsChildren > 0 || p.dependentsElderly > 0;
+}
+
 /** Center types that receive welfare-check alerts. */
 export const RESPONDER_TYPES = ['police', 'fire', 'hospital'] as const;

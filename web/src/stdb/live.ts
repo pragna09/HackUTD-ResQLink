@@ -34,6 +34,10 @@ function readSnapshot(conn: any): Snapshot {
       identity: hex(r.identity),
       displayName: r.displayName,
       ageGroup: r.ageGroup,
+      phone: r.phone,
+      dependentsChildren: r.dependentsChildren,
+      dependentsElderly: r.dependentsElderly,
+      needsAccessible: r.needsAccessible,
       vulnerabilityFlag: r.vulnerabilityFlag,
       hasPets: r.hasPets,
       hasWifi: r.hasWifi,
@@ -153,6 +157,14 @@ export function createLiveBackend(): Backend {
 
   const api: Api = {
     updateProfile: async a => need().reducers.updateProfile(a),
+    signOut: () => {
+      try {
+        localStorage.removeItem(TOKEN_KEY);
+      } catch {
+        /* storage blocked: nothing to forget */
+      }
+      window.location.reload();
+    },
     ping: async a => need().reducers.ping(a),
     requestResearch: async zoneId => need().reducers.requestResearch({ zoneId }),
     simulateDisaster: async (zoneId, severity) => need().reducers.simulateDisaster({ zoneId, severity }),

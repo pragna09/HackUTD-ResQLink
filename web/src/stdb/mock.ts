@@ -6,6 +6,7 @@ import {
   MIN_SEVERITY_FOR_SCAN,
   SILENCE_THRESHOLD_MIN,
   isInsideZone,
+  isVulnerable,
   nearest,
   urgencyScore,
   welfareCheckMessage,
@@ -36,7 +37,7 @@ function seed(): Snapshot {
   d.centers.forEach(c => s.centers.push({ ...c, isSynthetic: true }));
   d.users.forEach(u => {
     const id = `synthetic-${u.index}`;
-    s.profiles.set(id, { identity: id, displayName: u.displayName, ageGroup: u.ageGroup, vulnerabilityFlag: u.vulnerabilityFlag, hasPets: u.hasPets, hasWifi: u.hasWifi, optIn: true, isSynthetic: true, simSilent: u.silent });
+    s.profiles.set(id, { identity: id, displayName: u.displayName, ageGroup: u.ageGroup, phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: u.vulnerabilityFlag, vulnerabilityFlag: u.vulnerabilityFlag, hasPets: u.hasPets, hasWifi: u.hasWifi, optIn: true, isSynthetic: true, simSilent: u.silent });
     s.pings.set(id, { user: id, lat: u.lat, lng: u.lng, accuracy: u.accuracy, at: minAgo(u.minutesAgo) });
   });
   return s;
@@ -117,8 +118,13 @@ export function createMockBackend(): Backend {
   };
 
   const api: Api = {
+    signOut() {
+      data.profiles.delete(ME);
+      data.pings.delete(ME);
+      emit();
+    },
     async updateProfile(a) {
-      data.profiles.set(ME, { identity: ME, ...a, hasWifi: data.profiles.get(ME)?.hasWifi ?? true, isSynthetic: false, simSilent: false });
+      data.profiles.set(ME, { identity: ME, ...a, vulnerabilityFlag: isVulnerable(a), hasWifi: data.profiles.get(ME)?.hasWifi ?? true, isSynthetic: false, simSilent: false });
       if (!a.optIn) data.pings.delete(ME);
       emit();
     },
@@ -180,7 +186,7 @@ export function createMockBackend(): Backend {
         const hops = m.path.length - 1;
         const gw = m.path[m.path.length - 1].node;
         const relayedBy = hops > 0 ? (data.profiles.get(gw)?.displayName ?? `phone ${/^[0-9a-f]{64}$/.test(gw) ? gw.slice(-6) : gw.slice(0, 24)}`) : '';
-        const profile = data.profiles.get(m.origin) ?? { identity: m.origin, displayName: m.displayName, ageGroup: 'unknown', vulnerabilityFlag: false, hasPets: false, hasWifi: false, optIn: true, isSynthetic: false, simSilent: false };
+        const profile = data.profiles.get(m.origin) ?? { identity: m.origin, displayName: m.displayName, ageGroup: 'unknown', phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: false, vulnerabilityFlag: false, hasPets: false, hasWifi: false, optIn: true, isSynthetic: false, simSilent: false };
         data.profiles.set(m.origin, profile);
         const old = data.pings.get(m.origin);
         if (!old || old.at.getTime() < m.createdAtMs) data.pings.set(m.origin, { user: m.origin, lat: m.lat, lng: m.lng, accuracy: m.accuracy, at: new Date(m.createdAtMs) });

@@ -5,6 +5,10 @@ export interface Profile {
   identity: string;
   displayName: string;
   ageGroup: string;
+  phone: string;
+  dependentsChildren: number;
+  dependentsElderly: number;
+  needsAccessible: boolean;
   vulnerabilityFlag: boolean;
   hasPets: boolean;
   hasWifi: boolean;
@@ -134,9 +138,23 @@ export const emptySnapshot = (): Snapshot => ({
   llmProvider: 'gemini',
 });
 
+/** What the phone screen saves: demo sign-in + household. vulnerabilityFlag is derived by the module. */
+export interface ProfileInput {
+  displayName: string;
+  phone: string;
+  ageGroup: string;
+  dependentsChildren: number;
+  dependentsElderly: number;
+  needsAccessible: boolean;
+  hasPets: boolean;
+  optIn: boolean;
+}
+
 /** Reducer calls the UI can make. IDs are strings in the UI and converted to bigint at the edge. */
 export interface Api {
-  updateProfile(a: { displayName: string; ageGroup: string; vulnerabilityFlag: boolean; hasPets: boolean; optIn: boolean }): Promise<void>;
+  updateProfile(a: ProfileInput): Promise<void>;
+  /** Demo sign-out: forget this browser's identity and start fresh. */
+  signOut(): void;
   ping(a: { lat: number; lng: number; accuracy: number }): Promise<void>;
   requestResearch(zoneId: string): Promise<void>;
   simulateDisaster(zoneId: string, severity: number): Promise<void>;
