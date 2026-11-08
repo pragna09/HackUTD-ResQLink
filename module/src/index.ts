@@ -1,4 +1,4 @@
-// Welfare Check — SpacetimeDB module entry point.
+// ResQLink — SpacetimeDB module entry point.
 // Every export here must be a SpacetimeDB export (reducer, lifecycle hook) plus the default schema.
 // Reducer names: the export name in camelCase becomes the snake_case canonical name
 // (updateProfile -> update_profile), which is what `spacetime call` uses.

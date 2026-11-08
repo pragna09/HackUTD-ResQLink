@@ -1,4 +1,4 @@
-# Welfare Check — Architecture
+# ResQLink — Architecture
 
 > Concept prototype. All people, places, centers and news items are **synthetic**.
 

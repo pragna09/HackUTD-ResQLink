@@ -1,7 +1,7 @@
 {
   "name": "welfare-check-agents",
   "version": "0.1.0",
-  "description": "Agents worker for Welfare Check",
+  "description": "Agents worker for ResQLink",
   "scripts": {
     "dev": "tsx worker.ts",
     "start": "tsx worker.ts",

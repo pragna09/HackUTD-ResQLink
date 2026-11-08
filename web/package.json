@@ -1,7 +1,7 @@
 {
   "name": "welfare-check-web",
   "version": "0.1.0",
-  "description": "Welfare Check web app (concept prototype)",
+  "description": "ResQLink web app (concept prototype)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

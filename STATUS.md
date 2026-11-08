@@ -1,4 +1,4 @@
-# STATUS — Welfare Check
+# STATUS — ResQLink
 
 Snapshot: 2026-11-07, end of build session 1. Environment: Windows 11, Node 22.18, **no SpacetimeDB CLI, no Gemini/NVIDIA keys**.
 

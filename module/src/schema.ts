@@ -1,4 +1,4 @@
-// Tables for the Welfare Check module (SpacetimeDB 2.x TypeScript syntax, checked against spacetimedb@2.14.1).
+// Tables for the ResQLink module (SpacetimeDB 2.x TypeScript syntax, checked against spacetimedb@2.14.1).
 // Accessor keys and columns are camelCase. With the default SnakeCase policy the SQL names become
 // snake_case (missing_case, silent_minutes, ...), which matches the data model in the brief.
 import { schema, table, t, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
