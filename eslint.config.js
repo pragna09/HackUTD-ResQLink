@@ -5,8 +5,15 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/module_bindings/**', 'web/src/stdb/bindings-stub.ts', '**/*.json'],
-  },
+  ignores: [
+    '**/node_modules/**',
+    '**/dist/**',
+    '**/module_bindings/**',
+    'web/src/stdb/bindings-stub.ts',
+    '**/*.json',
+    'apps/mobile/**',
+  ],
+},
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
