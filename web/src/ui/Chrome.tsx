@@ -25,7 +25,7 @@ export function TopBar({ live }: { live: LiveState }) {
       <header className="topbar">
         <a className="brand" href="/">
           <span className="brand-mark" aria-hidden />
-          Welfare Check
+          ResQLink
         </a>
         <span className="pill">Concept prototype</span>
         <span className="pill alt">Synthetic data</span>
