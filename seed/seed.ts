@@ -42,7 +42,7 @@ DbConnection.builder()
       .onApplied(async () => {
         if (!checkOnly) {
           console.log(`calling reset_demo on ${URI}/${DB} …`);
-          await conn.reducers.resetDemo();
+          await conn.reducers.resetDemo({});
           await new Promise(r => setTimeout(r, 750)); // let the subscription catch up
         }
         console.table(counts());

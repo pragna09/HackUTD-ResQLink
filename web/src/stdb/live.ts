@@ -142,7 +142,7 @@ export function createLiveBackend(): Backend {
     requestResearch: async zoneId => need().reducers.requestResearch({ zoneId }),
     simulateDisaster: async (zoneId, severity) => need().reducers.simulateDisaster({ zoneId, severity }),
     silenceUsers: async (zoneId, count) => need().reducers.silenceUsers({ zoneId, count }),
-    resetDemo: async () => need().reducers.resetDemo(),
+    resetDemo: async () => need().reducers.resetDemo({}),
     acknowledgeAlert: async alertId => need().reducers.acknowledgeAlert({ alertId: BigInt(alertId) }),
     registerShelter: async a => need().reducers.registerShelter(a),
   };

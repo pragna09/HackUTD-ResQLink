@@ -23,15 +23,21 @@ Snapshot: 2026-11-07, end of build session 1. Environment: Windows 11, Node 22.1
   `npm --prefix seed run generate` → `seed/synthetic-data.json`. The module’s `init` and `reset_demo` load the same data.
 - [x] **Lint** (ESLint flat config, all packages): pass. **Docs**: README, docs/ARCHITECTURE.md (Mermaid), this file.
 
-## Pending (needs the SpacetimeDB CLI)
+## Verified live (session 2, 2026-11-08)
 
-| Item | Why pending | Command |
-|---|---|---|
-| **Publish module** | CLI not installed | `spacetime publish --server local --module-path module welfare-check` |
-| **Generate client bindings** | CLI not installed | `npm run bindings` (= `spacetime generate --lang typescript --out-dir <pkg>/module_bindings --module-path module` ×3) |
-| Typecheck of `agents`, `web`, `seed` | **Fails only because bindings are missing.** Errors are confined to the one adapter file per package: `agents/stdb.ts`, `web/src/stdb/live.ts`, `seed/seed.ts` (TS2307 “Cannot find module”, plus TS7006 implicit-any that follows from it). Every other file typechecks. | `npm run typecheck` after `npm run bindings` |
-| Live end-to-end run (phone → scan → agents → dashboard) | needs published module + bindings | see “Commands” below |
-| `npm --prefix seed run seed` | needs bindings + server | — |
+The CLI was already installed at `%LOCALAPPDATA%\SpacetimeDB\spacetime.exe` (v2.14.1) but is **not on PATH** in new shells.
+- `spacetime publish --server local --module-path module welfare-check` succeeded first try; `init` seeded 200/200/1/5/8/15 rows.
+- `npm run bindings` generated bindings for web, agents and seed. **Typecheck now passes in all four packages.**
+  One fix was needed: no-arg reducers take `{}` (`conn.reducers.resetDemo({})`).
+- Scheduled `scan_for_missing` fires every 30 s (synthetic heartbeats refresh).
+- End to end in a real browser against the local DB: Run weather research → Weather agent (fallback) → severity 4 → 34 cases
+  with nearest-center alerts → 34 triage reasons + 34 shelter holds by the agents → Acknowledge works → Silence 15 → 49 cases.
+  `/app` opt-in + heartbeat and `/volunteer` registration work. No console errors.
+
+## Still pending
+
+- Live LLM calls (needs `GEMINI_API_KEY` / `NVIDIA_API_KEY`).
+- Real phone GPS test; Maincloud deploy if you want a public URL.
 
 ## Unverified (written from docs/types, not yet exercised)
 
@@ -42,11 +48,11 @@ Snapshot: 2026-11-07, end of build session 1. Environment: Windows 11, Node 22.1
   `<think>` blocks are stripped instead.
 - **Gemini model** `gemini-3.5-flash-lite`: listed as Stable on the models page. Free-tier RPM/RPD is not published on the docs page
   (check AI Studio). `gemini-2.5-flash` is being retired on 2026-12-01, so don’t switch back to it.
-- **Generated binding names.** Client code assumes camelCase accessors (`conn.db.missingCase`, `conn.reducers.setRationale({...})`,
+- ~~Generated binding names~~ — verified in session 2. (Was: client code assumes camelCase accessors (`conn.db.missingCase`, `conn.reducers.setRationale({...})`,
   object-argument reducer calls, `resetDemo()` with no args) — this matches the SDK types and docs, but the generated files were
-  not available. If names differ, only the three adapter files need edits.
-- **Module packaging for `spacetime publish`**: `module/package.json` + `tsconfig.json` were hand-written (the docs did not show the
-  template). If publish complains, run `spacetime init --lang typescript /tmp/x` and copy its `package.json`/`tsconfig.json` shape.
+  not available. If names differ, only the three adapter files need edits.)
+- ~~Module packaging~~ — publish worked in session 2. (Was: **Module packaging for `spacetime publish`**: `module/package.json` + `tsconfig.json` were hand-written (the docs did not show the
+  template). If publish complains, run `spacetime init --lang typescript /tmp/x` and copy its `package.json`/`tsconfig.json` shape.)
 - `spacetime call --server local …` flag placement (CLI marks `call` as unstable).
 - Real-browser geolocation on a phone (tested only with the demo-location override in headless Chrome).
 
