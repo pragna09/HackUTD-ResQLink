@@ -31,6 +31,10 @@ export type TriageCase = Pick<
   | 'scoreSilence'
   | 'scoreVulnerability'
   | 'centerDistanceKm'
+  | 'sos'
+  | 'sosNote'
+  | 'viaMesh'
+  | 'meshHops'
 >;
 
 export interface TriageOutput {
@@ -44,6 +48,7 @@ const SYSTEM = [
   'For each case write ONE plain sentence telling a responder why this person needs a welfare check now.',
   'Use only the facts given. Do not invent medical conditions. Do not restate or change the score.',
   'Never say "confirmed emergency": a silent phone may only mean a dead battery or lost signal.',
+  'If a case says the person sent an SOS, lead with that: they asked for help, possibly relayed phone-to-phone because they had no signal. Do not mention hop counts.',
 ].join(' ');
 
 export function triagePrompt(cases: TriageCase[], zone: Pick<ZoneRow, 'name' | 'hazard' | 'summary'> | undefined): string {
@@ -53,7 +58,8 @@ export function triagePrompt(cases: TriageCase[], zone: Pick<ZoneRow, 'name' | '
       `- caseId ${c.id}: silent ${Math.round(c.silentMinutes)} min; zone severity ${c.severity}/5; ` +
       `vulnerable ${c.vulnerabilityFlag ? 'yes' : 'no'}; pets ${c.hasPets ? 'yes' : 'no'}; ` +
       `urgency ${c.urgencyScore.toFixed(1)}/100 (severity ${c.scoreSeverity}, silence ${c.scoreSilence}, vulnerability ${c.scoreVulnerability}); ` +
-      `nearest center ${c.centerDistanceKm >= 0 ? `${c.centerDistanceKm.toFixed(1)} km` : 'unknown'}`
+      `nearest center ${c.centerDistanceKm >= 0 ? `${c.centerDistanceKm.toFixed(1)} km` : 'unknown'}` +
+      (c.sos ? `; SENT AN SOS${c.viaMesh ? ' with no signal, relayed phone-to-phone' : ''}${c.sosNote ? `, message: "${c.sosNote}"` : ''}` : '')
   );
   return `${z}\n\nCases:\n${lines.join('\n')}\n\nReturn {"results":[{"caseId":"...","reason":"..."}]} with one entry per case.`;
 }
@@ -61,6 +67,11 @@ export function triagePrompt(cases: TriageCase[], zone: Pick<ZoneRow, 'name' | '
 /** Deterministic template used when the model is unavailable. */
 export function fallbackReason(c: TriageCase, hazard = 'hazard'): string {
   const parts = [`Silent ${Math.round(c.silentMinutes)} min inside a severity ${c.severity} ${hazard} zone`];
+  if (c.sos) {
+    const route = c.viaMesh ? ' with no signal (relayed phone-to-phone)' : '';
+    const note = c.sosNote ? `: "${c.sosNote}"` : '';
+    return `Sent an SOS${route}${note} — inside a severity ${c.severity} ${hazard} zone${c.vulnerabilityFlag ? ', self-reported as vulnerable' : ''}; send a welfare check.`;
+  }
   if (c.vulnerabilityFlag) parts.push('self-reported as vulnerable');
   if (c.hasPets) parts.push('has pets');
   const where = c.centerDistanceKm >= 0 ? `; last seen ${c.centerDistanceKm.toFixed(1)} km from the nearest center` : '';

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { URGENCY_WEIGHTS, SILENCE_CAP_MIN, SILENCE_THRESHOLD_MIN, MIN_SEVERITY_FOR_SCAN } from '../../../module/src/logic';
 import { DEMO_ZONE, ZONES } from '../../../module/src/seed_data';
+import { encodeUpload } from '../../../module/src/mesh';
+import { MESH_SIM_RANGE_KM, buildMeshScenario, type MeshScenario } from './meshSim';
 import { useApi, useLive } from '../stdb/store';
 import type { Alert, Case, Center, Profile, Zone } from '../stdb/types';
 import { SourceBadge, Toast, TopBar } from '../ui/Chrome';
-import { MapView } from '../ui/MapView';
+import { MapView, type MeshOverlay } from '../ui/MapView';
 import { ago, minutesLabel, severityColor, urgencyColor } from '../ui/format';
 import { errText, useToast } from '../ui/useToast';
 
@@ -21,7 +23,7 @@ export function Dashboard() {
   const zone: Zone | undefined = data.zones.find(z => z.id === zoneId) ?? data.zones[0];
   const zoneCases = useMemo(() => data.cases.filter(c => c.zoneId === zone?.id), [data.cases, zone?.id]);
   const active = useMemo(
-    () => zoneCases.filter(c => c.status !== 'resolved').sort((a, b) => b.urgencyScore - a.urgencyScore),
+    () => zoneCases.filter(c => c.status !== 'resolved').sort((a, b) => Number(b.sos) - Number(a.sos) || b.urgencyScore - a.urgencyScore),
     [zoneCases]
   );
   const resolved = useMemo(() => zoneCases.filter(c => c.status === 'resolved'), [zoneCases]);
@@ -32,6 +34,7 @@ export function Dashboard() {
   const showZone = (id: string) => {
     setZoneId(id);
     setSelectedId(null);
+    setMesh(null);
   };
   const listed = showResolved ? resolved : active;
   const pings = useMemo(() => [...data.pings.values()], [data.pings]);
@@ -44,6 +47,7 @@ export function Dashboard() {
   }, [active, selectedId]);
 
   const counters = {
+    sos: active.filter(c => c.sos).length,
     flagged: active.length,
     alerted: zoneAlerts.length,
     acknowledged: zoneAlerts.filter(a => a.status === 'acknowledged').length,
@@ -58,6 +62,41 @@ export function Dashboard() {
     }
   };
 
+  // ---- Mesh demo: run the real routing over a simulated phone network, animate it, then upload as the gateway would.
+  const [mesh, setMesh] = useState<{ scenario: MeshScenario; step: number; uploaded: boolean } | null>(null);
+  const startMesh = () => {
+    if (!zone) return;
+    setMesh({ scenario: buildMeshScenario(zone, data.profiles, data.pings, Date.now()), step: 0, uploaded: false });
+  };
+  useEffect(() => {
+    if (!mesh) return;
+    const { rounds, delivered } = mesh.scenario.result;
+    if (mesh.step < rounds.length) {
+      const t = setTimeout(() => setMesh(m => (m && m.scenario === mesh.scenario ? { ...m, step: m.step + 1 } : m)), 450);
+      return () => clearTimeout(t);
+    }
+    if (mesh.uploaded) return;
+    setMesh(m => (m ? { ...m, uploaded: true } : m));
+    const total = mesh.scenario.senders.length;
+    if (delivered.length === 0) toast.show(`Mesh: none of ${total} SOS messages reached a phone with signal`, true);
+    else void run(`Mesh delivered ${delivered.length} of ${total} SOS messages to phones with signal`, () => api.relayMesh(encodeUpload(delivered)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- advance only when the step changes
+  }, [mesh?.step, mesh?.uploaded, mesh?.scenario]);
+  const meshOverlay: MeshOverlay | undefined = useMemo(() => {
+    if (!mesh || mesh.scenario.zoneId !== zone?.id) return undefined;
+    const shown = mesh.scenario.result.rounds.slice(0, mesh.step);
+    return {
+      nodes: mesh.scenario.nodes,
+      links: mesh.scenario.result.links,
+      hops: shown.flatMap(r => r.hops),
+      gateways: shown.flatMap(r => r.uploads.map(u => u.gateway)),
+    };
+  }, [mesh, zone?.id]);
+  const meshPath = useMemo(() => {
+    const rows = data.meshMessages.filter(m => m.caseId !== undefined && m.caseId === selectedId);
+    return rows.sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime())[0]?.path;
+  }, [data.meshMessages, selectedId]);
+
   const loading = live.mode === 'spacetimedb' && live.status === 'connecting';
   const offline = live.mode === 'spacetimedb' && live.status === 'error';
 
@@ -66,9 +105,10 @@ export function Dashboard() {
       <TopBar live={live} />
 
       <div className="dash-strip">
+        <Counter cls="sos" n={offline ? null : counters.sos} label="SOS" loading={loading} />
         <Counter cls="flag" n={offline ? null : counters.flagged} label="Flagged" loading={loading} />
         <Counter cls="alert" n={offline ? null : counters.alerted} label={`Alerted · ${counters.acknowledged} ack`} loading={loading} />
-        <DemoControls zone={zone} zones={data.zones} llmProvider={data.llmProvider} onShowZone={showZone} run={run} disabled={!zone} />
+        <DemoControls zone={zone} zones={data.zones} llmProvider={data.llmProvider} onShowZone={showZone} onMesh={startMesh} meshBusy={!!mesh && !mesh.uploaded} run={run} disabled={!zone} />
       </div>
 
       <main className="dash-main">
@@ -98,6 +138,8 @@ export function Dashboard() {
           <MapView
             zones={data.zones}
             focusZone={zone}
+            meshOverlay={meshOverlay}
+            meshPath={meshPath}
             cases={listed}
             pings={pings}
             centers={data.centers}
@@ -120,9 +162,27 @@ export function Dashboard() {
             <div className="row">
               <span className="mk-center" style={{ width: 14, height: 14, lineHeight: '14px', fontSize: 8, borderWidth: 1 }}>F</span> emergency center
             </div>
+            {(meshOverlay || meshPath) && (
+              <div className="row">
+                <i style={{ background: '#c0392b', width: 14, height: 3, borderRadius: 0 }} /> mesh hop
+                <i style={{ background: '#7c818c', width: 6, height: 6, marginLeft: 6 }} /> no signal
+                <i style={{ background: '#2c5ba8', width: 6, height: 6, marginLeft: 6 }} /> has signal
+              </div>
+            )}
           </div>
           <div className="map-label">
-            <span className="chip">Last known locations · synthetic</span>
+            {mesh && meshOverlay ? (
+              <span className="chip mesh-status" role="status">
+                Mesh demo · round {Math.min(mesh.step, mesh.scenario.result.rounds.length)}/{mesh.scenario.result.rounds.length} ·{' '}
+                {mesh.scenario.nodes.length} phones, {MESH_SIM_RANGE_KM} km range (assumed) · reached signal{' '}
+                {meshOverlay.gateways.length}/{mesh.scenario.senders.length}
+                <button className="btn ghost small" onClick={() => setMesh(null)} disabled={!mesh.uploaded} style={{ height: 22, marginLeft: 6 }}>
+                  Clear
+                </button>
+              </span>
+            ) : (
+              <span className="chip">Last known locations · synthetic</span>
+            )}
           </div>
         </section>
 
@@ -146,6 +206,9 @@ export function Dashboard() {
         <span>
           Scans zones of severity ≥ {MIN_SEVERITY_FOR_SCAN}; silent = no heartbeat for {SILENCE_THRESHOLD_MIN}+ min. A dead battery looks the same as
           lost signal.
+        </span>
+        <span>
+          Mesh demo assumes {MESH_SIM_RANGE_KM} km phone-to-phone range and synthetic bystander phones; real range indoors is much shorter.
         </span>
         <span>All people, centers and news are synthetic. Concept prototype — not affiliated with any insurer.</span>
       </footer>
@@ -177,10 +240,12 @@ function DemoControls(props: {
   zones: Zone[];
   llmProvider: string;
   onShowZone: (id: string) => void;
+  onMesh: () => void;
+  meshBusy: boolean;
   run: (l: string, f: () => Promise<void>) => void;
   disabled: boolean;
 }) {
-  const { zone, zones, llmProvider, onShowZone, run, disabled } = props;
+  const { zone, zones, llmProvider, onShowZone, onMesh, meshBusy, run, disabled } = props;
   const api = useApi();
   // One entry per seeded scenario present in the database, in seed order (Dallas, LA, Miami).
   const scenarios = ZONES.filter(s => zones.some(z => z.id === s.id)).map(s => ({
@@ -249,6 +314,14 @@ function DemoControls(props: {
           Silence users
         </button>
       </span>
+      <button
+        className="btn"
+        disabled={disabled || meshBusy}
+        title="Cell towers in this zone go down: SOS messages hop phone-to-phone to the nearest phone with signal"
+        onClick={onMesh}
+      >
+        {meshBusy ? 'Mesh relaying…' : 'Simulate mesh (no signal)'}
+      </button>
       <button
         className="btn danger"
         onClick={() => {
@@ -332,6 +405,8 @@ function Queue(props: {
             <span className="meta">
               <span className="mono">silent {minutesLabel(c.silentMinutes)}</span>
               {c.vulnerabilityFlag && <span className="chip warn">vulnerable</span>}
+              {c.sos && <span className="chip sos">SOS</span>}
+              {c.viaMesh && <span className="chip info">via mesh</span>}
               {c.hasPets && <span className="chip">pets</span>}
               {wifi !== undefined && <span className={`chip${wifi ? '' : ' warn'}`}>{wifi ? 'Wi-Fi' : 'no Wi-Fi'}</span>}
               {a && <span className={`chip ${a.status === 'acknowledged' ? 'ok' : 'info'}`}>{a.status === 'acknowledged' ? 'ack’d' : 'alert sent'}</span>}
@@ -472,6 +547,34 @@ function CaseDetail(props: { c: Case | null; hasWifi?: boolean; alert?: Alert; c
           </h3>
           <p className="quote">{c.rationale || <span className="muted">Waiting for the Triage agent…</span>}</p>
         </div>
+
+        {(c.sos || c.viaMesh) && (
+          <div className="section">
+            <h3>How this reached us</h3>
+            <dl className="kv">
+              {c.sos && (
+                <>
+                  <dt>SOS</dt>
+                  <dd>
+                    <span className="chip sos">asked for help</span>
+                    {c.sosNote && <span className="quote" style={{ display: 'block', marginTop: 6 }}>“{c.sosNote}”</span>}
+                  </dd>
+                </>
+              )}
+              <dt>Route</dt>
+              <dd>
+                {c.viaMesh ? (
+                  <>
+                    No signal on their phone. Relayed phone-to-phone and uploaded by{' '}
+                    <b>{c.relayedBy}</b>. The red dashed line on the map is the route.
+                  </>
+                ) : (
+                  'Sent directly from their phone (queued while offline, or with signal).'
+                )}
+              </dd>
+            </dl>
+          </div>
+        )}
 
         <div className="section">
           <h3>Nearest center &amp; alert</h3>

@@ -37,6 +37,7 @@ import {
 import AcknowledgeAlertReducer from "./acknowledge_alert_reducer";
 import CreateNewsItemReducer from "./create_news_item_reducer";
 import PingReducer from "./ping_reducer";
+import RelayMeshMessagesReducer from "./relay_mesh_messages_reducer";
 import RequestResearchReducer from "./request_research_reducer";
 import ResetDemoReducer from "./reset_demo_reducer";
 import SetLlmProviderReducer from "./set_llm_provider_reducer";
@@ -53,6 +54,7 @@ import AgentConfigRow from "./agent_config_table";
 import AlertRow from "./alert_table";
 import EmergencyCenterRow from "./emergency_center_table";
 import LocationPingRow from "./location_ping_table";
+import MeshMessageRow from "./mesh_message_table";
 import MissingCaseRow from "./missing_case_table";
 import NewsItemRow from "./news_item_table";
 import UserProfileRow from "./user_profile_table";
@@ -109,6 +111,20 @@ const tablesSchema = __schema({
       { name: 'location_ping_user_key', constraint: 'unique', columns: ['user'] },
     ],
   }, LocationPingRow),
+  meshMessage: __table({
+    name: 'mesh_message',
+    indexes: [
+      { accessor: 'id', name: 'mesh_message_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'origin', name: 'mesh_message_origin_idx_btree', algorithm: 'btree', columns: [
+        'origin',
+      ] },
+    ],
+    constraints: [
+      { name: 'mesh_message_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, MeshMessageRow),
   missingCase: __table({
     name: 'missing_case',
     indexes: [
@@ -166,6 +182,7 @@ const reducersSchema = __reducers(
   __reducerSchema("acknowledge_alert", AcknowledgeAlertReducer),
   __reducerSchema("create_news_item", CreateNewsItemReducer),
   __reducerSchema("ping", PingReducer),
+  __reducerSchema("relay_mesh_messages", RelayMeshMessagesReducer),
   __reducerSchema("request_research", RequestResearchReducer),
   __reducerSchema("reset_demo", ResetDemoReducer),
   __reducerSchema("set_llm_provider", SetLlmProviderReducer),

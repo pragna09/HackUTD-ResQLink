@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createLlm, extractJson, type ProviderAdapter } from './llm';
-import { runTriage } from './triage';
+import { runTriage, triagePrompt } from './triage';
 import { WeatherSchema, storedWeatherFallback } from './weather';
 
 const fake = (replies: string[], available = true): ProviderAdapter & { calls: number } => {
@@ -77,6 +77,16 @@ describe('agents in fallback mode', () => {
   it('stored weather fallback validates', () => {
     expect(WeatherSchema.parse(storedWeatherFallback('trinity-bottoms')).severity).toBe(4);
     expect(WeatherSchema.parse(storedWeatherFallback('nowhere')).severity).toBe(2);
+  });
+
+  it('triage leads with the SOS and the mesh route when the person asked for help', async () => {
+    const sos = { ...c, sos: true, viaMesh: true, meshHops: 4, sosNote: 'Trapped upstairs' };
+    const [r] = await runTriage([sos], { name: 'Z', hazard: 'fire', summary: 's' }, off);
+    expect(r.rationale).toMatch(/^Sent an SOS with no signal \(relayed phone-to-phone\): "Trapped upstairs"/);
+    expect(r.rationale).not.toMatch(/hop/);
+    expect(r.rationale).not.toMatch(/confirmed emergency/i);
+    expect(triagePrompt([sos], undefined)).toContain('SENT AN SOS with no signal, relayed phone-to-phone');
+    expect(triagePrompt([sos], undefined)).not.toMatch(/\d+ (phone-to-phone )?hops?/);
   });
 
   it('triage fallback is tagged and never says "confirmed emergency"', async () => {

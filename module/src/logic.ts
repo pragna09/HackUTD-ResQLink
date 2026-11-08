@@ -112,3 +112,26 @@ export function welfareCheckMessage(args: {
     `${args.centerKm.toFixed(1)} km from ${args.centerName}. Status unknown — a dead battery and lost signal look the same.`
   );
 }
+
+/** Alert wording for an SOS that arrived over the phone-to-phone mesh. Never says "confirmed emergency". */
+export function meshSosMessage(args: {
+  displayName: string;
+  minutesAgo: number;
+  hops: number;
+  relayedBy: string;
+  note: string;
+  zoneName: string;
+  centerName: string;
+  centerKm: number;
+}): string {
+  const route = args.hops > 0 ? `relayed phone-to-phone to ${args.relayedBy}` : 'queued offline and sent when signal returned';
+  return (
+    `SOS from ${args.displayName}, sent ${Math.round(args.minutesAgo)} min ago with no signal and ${route}. ` +
+    `Last position inside ${args.zoneName}, ${args.centerKm.toFixed(1)} km from ${args.centerName}.` +
+    (args.note ? ` Their message: "${args.note}".` : '') +
+    ' Unverified — please send a welfare check.'
+  );
+}
+
+/** Center types that receive welfare-check alerts. */
+export const RESPONDER_TYPES = ['police', 'fire', 'hospital'] as const;

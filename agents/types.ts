@@ -42,6 +42,11 @@ export interface CaseRow {
   status: string;
   assignedCenter: number | undefined;
   centerDistanceKm: number;
+  /** Mesh relay: the person sent an SOS (possibly hop by hop over nearby phones). */
+  sos?: boolean;
+  sosNote?: string;
+  viaMesh?: boolean;
+  meshHops?: number;
 }
 
 export interface CenterRow {

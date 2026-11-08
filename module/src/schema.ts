@@ -33,6 +33,11 @@ export const locationPing = table(
     lng: t.f64(),
     accuracy: t.f64(),
     timestamp: t.timestamp(),
+    /** True when this location arrived over the phone-to-phone mesh (the phone itself had no signal). */
+    viaMesh: t.bool(),
+    meshHops: t.u32(),
+    /** Name of the phone that had signal and uploaded it ('' for direct pings). */
+    relayedBy: t.string(),
   }
 );
 
@@ -111,6 +116,12 @@ export const missingCase = table(
     status: t.string(),
     assignedCenter: t.option(t.u32()),
     centerDistanceKm: t.f64(),
+    // Mesh relay. An SOS case is never auto-resolved by a fresh heartbeat; a responder closes it.
+    sos: t.bool(),
+    sosNote: t.string(),
+    viaMesh: t.bool(),
+    meshHops: t.u32(),
+    relayedBy: t.string(),
     openedAt: t.timestamp(),
     updatedAt: t.timestamp(),
   }
@@ -126,6 +137,33 @@ export const alert = table(
     /** 'sent' | 'acknowledged' */
     status: t.string(),
     timestamp: t.timestamp(),
+  }
+);
+
+/** Every message a phone with signal uploaded on behalf of the mesh. De-duplicated by message id. */
+export const meshMessage = table(
+  { name: 'mesh_message', public: true },
+  {
+    id: t.string().primaryKey(),
+    /** 'sos' | 'heartbeat' */
+    kind: t.string(),
+    origin: t.identity().index('btree'),
+    displayName: t.string(),
+    lat: t.f64(),
+    lng: t.f64(),
+    /** When the person's phone created it (not when it was uploaded). */
+    createdAt: t.timestamp(),
+    receivedAt: t.timestamp(),
+    hops: t.u32(),
+    /** Connection that uploaded it, and the mesh node id of that phone. */
+    gateway: t.identity(),
+    gatewayNode: t.string(),
+    relayedBy: t.string(),
+    /** Route taken, origin first (for the dashboard map). */
+    pathLat: t.array(t.f64()),
+    pathLng: t.array(t.f64()),
+    note: t.string(),
+    caseId: t.option(t.u64()),
   }
 );
 
@@ -159,6 +197,7 @@ const spacetimedb = schema({
   emergencyCenter,
   missingCase,
   alert,
+  meshMessage,
   agentConfig,
   scanSchedule,
 });

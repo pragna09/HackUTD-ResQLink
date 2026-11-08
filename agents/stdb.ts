@@ -68,6 +68,10 @@ const toCase = (r: any): CaseRow => ({
   status: r.status,
   assignedCenter: r.assignedCenter ?? undefined,
   centerDistanceKm: r.centerDistanceKm,
+  sos: r.sos,
+  sosNote: r.sosNote,
+  viaMesh: r.viaMesh,
+  meshHops: r.meshHops,
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
 

@@ -16,4 +16,7 @@ export default __t.row({
   lng: __t.f64(),
   accuracy: __t.f64(),
   timestamp: __t.timestamp(),
+  viaMesh: __t.bool().name("via_mesh"),
+  meshHops: __t.u32().name("mesh_hops"),
+  relayedBy: __t.string().name("relayed_by"),
 });

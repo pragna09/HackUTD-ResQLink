@@ -31,6 +31,11 @@ export default __t.row({
   status: __t.string(),
   assignedCenter: __t.option(__t.u32()).name("assigned_center"),
   centerDistanceKm: __t.f64().name("center_distance_km"),
+  sos: __t.bool(),
+  sosNote: __t.string().name("sos_note"),
+  viaMesh: __t.bool().name("via_mesh"),
+  meshHops: __t.u32().name("mesh_hops"),
+  relayedBy: __t.string().name("relayed_by"),
   openedAt: __t.timestamp().name("opened_at"),
   updatedAt: __t.timestamp().name("updated_at"),
 });

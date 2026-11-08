@@ -75,7 +75,29 @@ export interface Case {
   status: string;
   assignedCenter: number | undefined;
   centerDistanceKm: number;
+  /** The person sent an SOS. SOS cases rank first and never auto-resolve. */
+  sos: boolean;
+  sosNote: string;
+  /** Arrived over the phone-to-phone mesh (the person's phone had no signal). */
+  viaMesh: boolean;
+  meshHops: number;
+  relayedBy: string;
   openedAt: Date;
+}
+
+/** A message a phone with signal uploaded on behalf of the mesh. */
+export interface MeshMsg {
+  id: string;
+  kind: string;
+  origin: string;
+  displayName: string;
+  createdAt: Date;
+  receivedAt: Date;
+  hops: number;
+  relayedBy: string;
+  path: Array<[number, number]>;
+  note: string;
+  caseId: string | undefined;
 }
 
 export interface Alert {
@@ -95,6 +117,7 @@ export interface Snapshot {
   centers: Center[];
   cases: Case[];
   alerts: Alert[];
+  meshMessages: MeshMsg[];
   /** Model every agent uses, picked on the dashboard: 'gemini' | 'nvidia'. */
   llmProvider: string;
 }
@@ -107,6 +130,7 @@ export const emptySnapshot = (): Snapshot => ({
   centers: [],
   cases: [],
   alerts: [],
+  meshMessages: [],
   llmProvider: 'gemini',
 });
 
@@ -120,6 +144,8 @@ export interface Api {
   resetDemo(): Promise<void>;
   acknowledgeAlert(alertId: string): Promise<void>;
   setLlmProvider(provider: string): Promise<void>;
+  /** Upload mesh messages as a gateway would (JSON array from module/src/mesh.ts encodeUpload). */
+  relayMesh(payload: string): Promise<void>;
 }
 
 export type ConnStatus = 'connecting' | 'live' | 'error' | 'disconnected';

@@ -7,16 +7,22 @@ import {
   MIN_SEVERITY_FOR_SCAN,
   SCAN_INTERVAL_SEC,
   SILENCE_THRESHOLD_MIN,
+  RESPONDER_TYPES,
   isInsideZone,
+  meshSosMessage,
   minutesBetweenMicros,
   nearest,
   urgencyScore,
   welfareCheckMessage,
 } from './logic';
+import { decodeUpload, type MeshMessage } from './mesh';
 import { buildSeedDataset, prng, syntheticIdentityValue } from './seed_data';
 
 const AGE_GROUPS = new Set(['0-17', '18-64', '65+']);
 const SOURCES = new Set(['llm', 'fallback']);
+
+/** Mesh fields for a location that arrived directly from the phone. */
+const DIRECT = { viaMesh: false, meshHops: 0, relayedBy: '' };
 
 const isLat = (v: number) => Number.isFinite(v) && v >= -90 && v <= 90;
 const isLng = (v: number) => Number.isFinite(v) && v >= -180 && v <= 180;
@@ -65,6 +71,7 @@ export function ping(ctx: Ctx, a: { lat: number; lng: number; accuracy: number }
     lng: a.lng,
     accuracy: Number.isFinite(a.accuracy) && a.accuracy >= 0 ? a.accuracy : 0,
     timestamp: ctx.timestamp,
+    ...DIRECT,
   };
   if (ctx.db.locationPing.user.find(ctx.sender)) ctx.db.locationPing.user.update(row);
   else ctx.db.locationPing.insert(row);
@@ -184,6 +191,99 @@ export interface ScanResult {
   resolved: number;
 }
 
+type Zone = NonNullable<ReturnType<Ctx['db']['zone']['id']['find']>>;
+type Profile = NonNullable<ReturnType<Ctx['db']['userProfile']['identity']['find']>>;
+type Ping = NonNullable<ReturnType<Ctx['db']['locationPing']['user']['find']>>;
+type Case = NonNullable<ReturnType<Ctx['db']['missingCase']['id']['find']>>;
+
+function activeCaseFor(ctx: Ctx, user: Identity): Case | undefined {
+  let active: Case | undefined;
+  for (const c of ctx.db.missingCase.user.filter(user)) if (c.status !== 'resolved') active = c;
+  return active;
+}
+
+/** Highest-severity zone containing the point. */
+function zoneAt(zones: Zone[], p: { lat: number; lng: number }): Zone | undefined {
+  let hit: Zone | undefined;
+  for (const z of zones) if (isInsideZone(p, z) && (!hit || z.severity > hit.severity)) hit = z;
+  return hit;
+}
+
+/** Police, fire and hospital only. */
+const responders = (ctx: Ctx) => [...ctx.db.emergencyCenter.iter()].filter(c => (RESPONDER_TYPES as readonly string[]).includes(c.type));
+
+function scoreFields(profile: Profile, lp: Ping, zone: Zone, silentMinutes: number) {
+  const score = urgencyScore({ severity: zone.severity, silentMinutes, vulnerable: profile.vulnerabilityFlag });
+  return {
+    silentMinutes: Math.round(silentMinutes * 10) / 10,
+    severity: zone.severity,
+    vulnerabilityFlag: profile.vulnerabilityFlag,
+    hasPets: profile.hasPets,
+    scoreSeverity: score.severityPart,
+    scoreSilence: score.silencePart,
+    scoreVulnerability: score.vulnerabilityPart,
+    urgencyScore: score.total,
+    lastLat: lp.lat,
+    lastLng: lp.lng,
+    lastSeen: lp.timestamp,
+  };
+}
+
+/** Insert a case, pick the nearest responder with haversine and send its alert. Shared by the scan and the mesh relay. */
+function openCase(
+  ctx: Ctx,
+  a: { profile: Profile; lp: Ping; zone: Zone; silentMinutes: number; sos?: { note: string; minutesAgo: number } }
+): Case {
+  const near = nearest(a.lp, responders(ctx));
+  const inserted = ctx.db.missingCase.insert({
+    id: 0n,
+    user: a.profile.identity,
+    zoneId: a.zone.id,
+    displayName: a.profile.displayName,
+    ...scoreFields(a.profile, a.lp, a.zone, a.silentMinutes),
+    rationale: '',
+    rationaleSource: '',
+    status: 'open',
+    assignedCenter: near?.item.id,
+    centerDistanceKm: near ? Math.round(near.km * 100) / 100 : -1,
+    sos: !!a.sos,
+    sosNote: a.sos?.note ?? '',
+    viaMesh: a.lp.viaMesh,
+    meshHops: a.lp.meshHops,
+    relayedBy: a.lp.relayedBy,
+    openedAt: ctx.timestamp,
+    updatedAt: ctx.timestamp,
+  });
+  if (near) {
+    ctx.db.alert.insert({
+      id: 0n,
+      caseId: inserted.id,
+      centerId: near.item.id,
+      message: a.sos
+        ? meshSosMessage({
+            displayName: a.profile.displayName,
+            minutesAgo: a.sos.minutesAgo,
+            hops: a.lp.meshHops,
+            relayedBy: a.lp.relayedBy,
+            note: a.sos.note,
+            zoneName: a.zone.name,
+            centerName: near.item.name,
+            centerKm: near.km,
+          })
+        : welfareCheckMessage({
+            displayName: a.profile.displayName,
+            silentMinutes: a.silentMinutes,
+            zoneName: a.zone.name,
+            centerName: near.item.name,
+            centerKm: near.km,
+          }),
+      status: 'sent',
+      timestamp: ctx.timestamp,
+    });
+  }
+  return inserted;
+}
+
 export function runScan(ctx: Ctx): ScanResult {
   const now = ctx.timestamp.microsSinceUnixEpoch;
   const result: ScanResult = { opened: 0, refreshed: 0, resolved: 0 };
@@ -196,101 +296,179 @@ export function runScan(ctx: Ctx): ScanResult {
   }
 
   const zones = [...ctx.db.zone.iter()];
-  const centers = [...ctx.db.emergencyCenter.iter()];
 
   for (const lp of [...ctx.db.locationPing.iter()]) {
     const profile = ctx.db.userProfile.identity.find(lp.user);
     if (!profile || !profile.optIn) continue;
-
-    let active: ReturnType<typeof ctx.db.missingCase.id.find> = null;
-    for (const c of ctx.db.missingCase.user.filter(lp.user)) {
-      if (c.status !== 'resolved') active = c;
-    }
-
+    const active = activeCaseFor(ctx, lp.user);
     const silentMinutes = minutesBetweenMicros(now, lp.timestamp.microsSinceUnixEpoch);
 
-    // Heartbeat is back: close the case.
+    // Heartbeat is back: close the case. An SOS stays open until a responder handles it.
     if (silentMinutes < SILENCE_THRESHOLD_MIN) {
-      if (active) {
-        ctx.db.missingCase.id.update({
-          ...active,
-          status: 'resolved',
-          silentMinutes,
-          updatedAt: ctx.timestamp,
-        });
+      if (active && !active.sos) {
+        ctx.db.missingCase.id.update({ ...active, status: 'resolved', silentMinutes, updatedAt: ctx.timestamp });
         result.resolved++;
       }
       continue;
     }
 
-    // Highest-severity zone containing the last known position.
-    let zoneHit: (typeof zones)[number] | undefined;
-    for (const z of zones) {
-      if (isInsideZone(lp, z) && (!zoneHit || z.severity > zoneHit.severity)) zoneHit = z;
-    }
-    const caseZone = zoneHit ?? (active ? zones.find(z => z.id === active.zoneId) : undefined);
+    const caseZone = zoneAt(zones, lp) ?? (active ? zones.find(z => z.id === active.zoneId) : undefined);
     if (!caseZone) continue;
     if (!active && caseZone.severity < MIN_SEVERITY_FOR_SCAN) continue;
 
-    const score = urgencyScore({
-      severity: caseZone.severity,
-      silentMinutes,
-      vulnerable: profile.vulnerabilityFlag,
-    });
-    const scoreFields = {
-      silentMinutes: Math.round(silentMinutes * 10) / 10,
-      severity: caseZone.severity,
-      vulnerabilityFlag: profile.vulnerabilityFlag,
-      hasPets: profile.hasPets,
-      scoreSeverity: score.severityPart,
-      scoreSilence: score.silencePart,
-      scoreVulnerability: score.vulnerabilityPart,
-      urgencyScore: score.total,
-      lastLat: lp.lat,
-      lastLng: lp.lng,
-      lastSeen: lp.timestamp,
-    };
-
     if (active) {
-      ctx.db.missingCase.id.update({ ...active, ...scoreFields, zoneId: caseZone.id, updatedAt: ctx.timestamp });
+      ctx.db.missingCase.id.update({
+        ...active,
+        ...scoreFields(profile, lp, caseZone, silentMinutes),
+        zoneId: caseZone.id,
+        updatedAt: ctx.timestamp,
+      });
       result.refreshed++;
       continue;
     }
-
-    const near = nearest(lp, centers);
-    const inserted = ctx.db.missingCase.insert({
-      id: 0n,
-      user: lp.user,
-      zoneId: caseZone.id,
-      displayName: profile.displayName,
-      ...scoreFields,
-      rationale: '',
-      rationaleSource: '',
-      status: 'open',
-      assignedCenter: near?.item.id,
-      centerDistanceKm: near ? Math.round(near.km * 100) / 100 : -1,
-      openedAt: ctx.timestamp,
-      updatedAt: ctx.timestamp,
-    });
-    if (near) {
-      ctx.db.alert.insert({
-        id: 0n,
-        caseId: inserted.id,
-        centerId: near.item.id,
-        message: welfareCheckMessage({
-          displayName: profile.displayName,
-          silentMinutes,
-          zoneName: caseZone.name,
-          centerName: near.item.name,
-          centerKm: near.km,
-        }),
-        status: 'sent',
-        timestamp: ctx.timestamp,
-      });
-    }
+    openCase(ctx, { profile, lp, zone: caseZone, silentMinutes });
     result.opened++;
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Mesh relay: a phone with signal uploads what it carried for phones without signal
+// ---------------------------------------------------------------------------------------------
+
+export interface RelayResult {
+  accepted: number;
+  duplicates: number;
+  sosCases: number;
+}
+
+/** Messages older than this are rejected; future timestamps are clamped to now (phone clocks drift). */
+const MESH_MAX_AGE_MIN = 24 * 60;
+const MESH_CLOCK_SKEW_MIN = 5;
+
+function relayName(ctx: Ctx, node: string): string {
+  if (/^[0-9a-f]{64}$/.test(node)) {
+    const p = ctx.db.userProfile.identity.find(new Identity(node));
+    if (p) return p.displayName;
+    return `phone ${node.slice(-6)}`;
+  }
+  // Mesh node ids that are not account identities (e.g. a phone that never signed in) are shown as-is.
+  return `phone ${node.slice(0, 24)}`;
+}
+
+/**
+ * relay_mesh_messages. `payload` is a JSON array of mesh messages (module/src/mesh.ts, strictly validated).
+ *  - Each message id is stored once, so several gateways uploading the same SOS is harmless.
+ *  - The location only replaces the stored one if it is newer, and keeps the phone's own timestamp,
+ *    so silence is still measured from when the person's phone last spoke.
+ *  - An SOS opens a case right away (even below the severity-3 scan threshold), marks an existing case as
+ *    SOS, alerts the nearest responder, and is never auto-resolved by later heartbeats.
+ */
+export function relayMeshMessages(ctx: Ctx, a: { payload: string }): RelayResult {
+  const messages = decodeUpload(a.payload);
+  if (!messages) throw new SenderError('Invalid mesh payload');
+  const nowMicros = ctx.timestamp.microsSinceUnixEpoch;
+  const result: RelayResult = { accepted: 0, duplicates: 0, sosCases: 0 };
+  const zones = [...ctx.db.zone.iter()];
+
+  // Oldest first, so a later heartbeat from the same person wins.
+  for (const m of [...messages].sort((x, y) => x.createdAtMs - y.createdAtMs)) {
+    if (ctx.db.meshMessage.id.find(m.id)) {
+      result.duplicates++;
+      continue;
+    }
+    let createdMicros = BigInt(Math.round(m.createdAtMs)) * 1000n;
+    const ageMin = Number(nowMicros - createdMicros) / 60_000_000;
+    if (ageMin > MESH_MAX_AGE_MIN) continue;
+    if (ageMin < -MESH_CLOCK_SKEW_MIN || createdMicros > nowMicros) createdMicros = nowMicros;
+    const createdAt = new Timestamp(createdMicros);
+    const hops = m.path.length - 1;
+    const gatewayNode = m.path[m.path.length - 1].node;
+    const relayedBy = hops > 0 ? relayName(ctx, gatewayNode) : '';
+    const origin = new Identity(m.origin);
+
+    // The person: existing profile, or a minimal one (sending an SOS/heartbeat is consent to be located).
+    let profile = ctx.db.userProfile.identity.find(origin);
+    if (!profile) {
+      profile = ctx.db.userProfile.insert({
+        identity: origin,
+        displayName: m.displayName.trim() || 'Unknown (mesh)',
+        ageGroup: 'unknown',
+        vulnerabilityFlag: false,
+        hasPets: false,
+        hasWifi: false,
+        optIn: true,
+        isSynthetic: false,
+        simSilent: false,
+        updatedAt: ctx.timestamp,
+      });
+    }
+
+    const mesh = { viaMesh: hops > 0, meshHops: hops, relayedBy };
+    const old = ctx.db.locationPing.user.find(origin);
+    let lp: Ping;
+    if (!old || old.timestamp.microsSinceUnixEpoch < createdMicros) {
+      const row = { user: origin, lat: m.lat, lng: m.lng, accuracy: m.accuracy, timestamp: createdAt, ...mesh };
+      lp = old ? ctx.db.locationPing.user.update(row) : ctx.db.locationPing.insert(row);
+    } else {
+      lp = old;
+    }
+
+    let caseId: bigint | undefined;
+    if (m.kind === 'sos') {
+      const sos = { note: m.note.trim(), minutesAgo: Math.max(0, ageMin) };
+      const active = activeCaseFor(ctx, origin);
+      if (active) {
+        // Mark it SOS and let the Triage agent rewrite the reason with that in mind.
+        ctx.db.missingCase.id.update({
+          ...active,
+          sos: true,
+          sosNote: sos.note,
+          ...mesh,
+          lastLat: m.lat,
+          lastLng: m.lng,
+          rationale: active.sos ? active.rationale : '',
+          rationaleSource: active.sos ? active.rationaleSource : '',
+          status: 'open',
+          updatedAt: ctx.timestamp,
+        });
+        caseId = active.id;
+      } else {
+        const zone = zoneAt(zones, m) ?? nearestZone(zones, m);
+        if (zone) {
+          const silentMinutes = minutesBetweenMicros(nowMicros, lp.timestamp.microsSinceUnixEpoch);
+          caseId = openCase(ctx, { profile, lp: { ...lp, ...mesh }, zone, silentMinutes, sos }).id;
+        }
+      }
+      result.sosCases++;
+    }
+
+    ctx.db.meshMessage.insert({
+      id: m.id,
+      kind: m.kind,
+      origin,
+      displayName: profile.displayName,
+      lat: m.lat,
+      lng: m.lng,
+      createdAt,
+      receivedAt: ctx.timestamp,
+      hops,
+      gateway: ctx.sender,
+      gatewayNode,
+      relayedBy,
+      pathLat: m.path.map(h => h.lat),
+      pathLng: m.path.map(h => h.lng),
+      note: m.note,
+      caseId,
+    });
+    result.accepted++;
+  }
+  return result;
+}
+
+/** For an SOS outside every zone: attach it to the nearest zone so it still shows on that zone's queue. */
+function nearestZone(zones: Zone[], p: MeshMessage): Zone | undefined {
+  return nearest(p, zones.map(z => ({ ...z, lat: z.centerLat, lng: z.centerLng })))?.item;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -341,6 +519,7 @@ export function silenceUsers(ctx: Ctx, a: { zoneId: string; count: number }) {
 export function resetDemo(ctx: Ctx) {
   for (const id of [...ctx.db.alert.iter()].map(r => r.id)) ctx.db.alert.id.delete(id);
   for (const id of [...ctx.db.missingCase.iter()].map(r => r.id)) ctx.db.missingCase.id.delete(id);
+  for (const id of [...ctx.db.meshMessage.iter()].map(r => r.id)) ctx.db.meshMessage.id.delete(id);
   for (const id of [...ctx.db.newsItem.iter()].map(r => r.id)) ctx.db.newsItem.id.delete(id);
   for (const id of [...ctx.db.zone.iter()].map(r => r.id)) ctx.db.zone.id.delete(id);
   for (const id of [...ctx.db.emergencyCenter.iter()].map(r => r.id)) ctx.db.emergencyCenter.id.delete(id);
@@ -390,6 +569,7 @@ export function loadSeed(ctx: Ctx) {
       lng: u.lng,
       accuracy: u.accuracy,
       timestamp: minutesAgo(ctx, u.minutesAgo),
+      ...DIRECT,
     });
   }
   ensureSchedule(ctx);

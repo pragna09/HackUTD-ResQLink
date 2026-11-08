@@ -43,8 +43,31 @@ export const LocationPing = __t.object("LocationPing", {
   lng: __t.f64(),
   accuracy: __t.f64(),
   timestamp: __t.timestamp(),
+  viaMesh: __t.bool(),
+  meshHops: __t.u32(),
+  relayedBy: __t.string(),
 });
 export type LocationPing = __Infer<typeof LocationPing>;
+
+export const MeshMessage = __t.object("MeshMessage", {
+  id: __t.string(),
+  kind: __t.string(),
+  origin: __t.identity(),
+  displayName: __t.string(),
+  lat: __t.f64(),
+  lng: __t.f64(),
+  createdAt: __t.timestamp(),
+  receivedAt: __t.timestamp(),
+  hops: __t.u32(),
+  gateway: __t.identity(),
+  gatewayNode: __t.string(),
+  relayedBy: __t.string(),
+  pathLat: __t.array(__t.f64()),
+  pathLng: __t.array(__t.f64()),
+  note: __t.string(),
+  caseId: __t.option(__t.u64()),
+});
+export type MeshMessage = __Infer<typeof MeshMessage>;
 
 export const MissingCase = __t.object("MissingCase", {
   id: __t.u64(),
@@ -67,6 +90,11 @@ export const MissingCase = __t.object("MissingCase", {
   status: __t.string(),
   assignedCenter: __t.option(__t.u32()),
   centerDistanceKm: __t.f64(),
+  sos: __t.bool(),
+  sosNote: __t.string(),
+  viaMesh: __t.bool(),
+  meshHops: __t.u32(),
+  relayedBy: __t.string(),
   openedAt: __t.timestamp(),
   updatedAt: __t.timestamp(),
 });

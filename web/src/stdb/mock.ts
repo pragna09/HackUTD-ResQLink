@@ -9,7 +9,9 @@ import {
   nearest,
   urgencyScore,
   welfareCheckMessage,
+  meshSosMessage,
 } from '../../../module/src/logic';
+import { decodeUpload } from '../../../module/src/mesh';
 import { buildSeedDataset, prng } from '../../../module/src/seed_data';
 import type { Api, Backend, Case, LiveState, Snapshot } from './types';
 import { emptySnapshot } from './types';
@@ -46,7 +48,7 @@ export function createMockBackend(): Backend {
   let nextId = 1;
   let state: LiveState = { mode: 'mock', status: 'live', identity: ME, data, version: 0 };
   const emit = () => {
-    state = { ...state, data: { ...data, cases: [...data.cases], alerts: [...data.alerts], zones: [...data.zones] }, version: state.version + 1 };
+    state = { ...state, data: { ...data, cases: [...data.cases], alerts: [...data.alerts], meshMessages: [...data.meshMessages], zones: [...data.zones] }, version: state.version + 1 };
     listeners.forEach(l => l());
   };
 
@@ -62,7 +64,7 @@ export function createMockBackend(): Backend {
       const silent = (now - lp.at.getTime()) / 60_000;
       const active = data.cases.find(c => c.user === lp.user && c.status !== 'resolved');
       if (silent < SILENCE_THRESHOLD_MIN) {
-        if (active) Object.assign(active, { status: 'resolved' });
+        if (active && !active.sos) Object.assign(active, { status: 'resolved' });
         continue;
       }
       const zone = data.zones.filter(z => isInsideZone(lp, z)).sort((a, b) => b.severity - a.severity)[0];
@@ -82,6 +84,7 @@ export function createMockBackend(): Backend {
         id: String(nextId++), user: lp.user, zoneId: zone.id, displayName: profile.displayName, ...fields,
         rationale: '', rationaleSource: '', status: 'open', assignedCenter: near?.item.id,
         centerDistanceKm: near ? Math.round(near.km * 100) / 100 : -1, openedAt: new Date(),
+        sos: false, sosNote: '', viaMesh: false, meshHops: 0, relayedBy: '',
       };
       data.cases.push(c);
       if (near) {
@@ -167,6 +170,57 @@ export function createMockBackend(): Backend {
     async setLlmProvider(provider) {
       data.llmProvider = provider;
       emit();
+    },
+    // Same rules as the module's relay_mesh_messages, simplified for the preview.
+    async relayMesh(payload) {
+      const messages = decodeUpload(payload);
+      if (!messages) throw new Error('Invalid mesh payload');
+      for (const m of [...messages].sort((a, b) => a.createdAtMs - b.createdAtMs)) {
+        if (data.meshMessages.some(x => x.id === m.id)) continue;
+        const hops = m.path.length - 1;
+        const gw = m.path[m.path.length - 1].node;
+        const relayedBy = hops > 0 ? (data.profiles.get(gw)?.displayName ?? `phone ${/^[0-9a-f]{64}$/.test(gw) ? gw.slice(-6) : gw.slice(0, 24)}`) : '';
+        const profile = data.profiles.get(m.origin) ?? { identity: m.origin, displayName: m.displayName, ageGroup: 'unknown', vulnerabilityFlag: false, hasPets: false, hasWifi: false, optIn: true, isSynthetic: false, simSilent: false };
+        data.profiles.set(m.origin, profile);
+        const old = data.pings.get(m.origin);
+        if (!old || old.at.getTime() < m.createdAtMs) data.pings.set(m.origin, { user: m.origin, lat: m.lat, lng: m.lng, accuracy: m.accuracy, at: new Date(m.createdAtMs) });
+        let caseId: string | undefined;
+        if (m.kind === 'sos') {
+          const mesh = { sos: true, sosNote: m.note, viaMesh: hops > 0, meshHops: hops, relayedBy };
+          const active = data.cases.find(c => c.user === m.origin && c.status !== 'resolved');
+          if (active) {
+            Object.assign(active, mesh, { lastLat: m.lat, lastLng: m.lng, rationale: '', status: 'open' });
+            caseId = active.id;
+          } else {
+            const zone = data.zones.find(z => isInsideZone(m, z)) ?? nearest(m, data.zones.map(z => ({ ...z, lat: z.centerLat, lng: z.centerLng })))?.item;
+            if (zone) {
+              const silent = (Date.now() - m.createdAtMs) / 60_000;
+              const s = urgencyScore({ severity: zone.severity, silentMinutes: silent, vulnerable: profile.vulnerabilityFlag });
+              const near = nearest(m, data.centers);
+              const c: Case = {
+                id: String(nextId++), user: m.origin, zoneId: zone.id, displayName: profile.displayName,
+                silentMinutes: Math.round(silent * 10) / 10, severity: zone.severity, vulnerabilityFlag: profile.vulnerabilityFlag, hasPets: profile.hasPets,
+                scoreSeverity: s.severityPart, scoreSilence: s.silencePart, scoreVulnerability: s.vulnerabilityPart, urgencyScore: s.total,
+                lastLat: m.lat, lastLng: m.lng, lastSeen: new Date(m.createdAtMs), rationale: '', rationaleSource: '', status: 'open',
+                assignedCenter: near?.item.id, centerDistanceKm: near ? Math.round(near.km * 100) / 100 : -1, openedAt: new Date(), ...mesh,
+              };
+              data.cases.push(c);
+              caseId = c.id;
+              if (near) {
+                data.alerts.push({
+                  id: c.id, caseId: c.id, centerId: near.item.id, status: 'sent', at: new Date(),
+                  message: meshSosMessage({ displayName: profile.displayName, minutesAgo: silent, hops, relayedBy, note: m.note, zoneName: zone.name, centerName: near.item.name, centerKm: near.km }),
+                });
+              }
+            }
+          }
+        }
+        data.meshMessages.push({
+          id: m.id, kind: m.kind, origin: m.origin, displayName: profile.displayName, createdAt: new Date(m.createdAtMs), receivedAt: new Date(),
+          hops, relayedBy, path: m.path.map(h => [h.lat, h.lng] as [number, number]), note: m.note, caseId,
+        });
+      }
+      scan();
     },
     async acknowledgeAlert(alertId) {
       const a = data.alerts.find(x => x.id === alertId);

@@ -65,6 +65,17 @@ export const acknowledgeAlert = spacetimedb.reducer({ alertId: t.u64() }, (ctx, 
 /** Dashboard model picker: 'gemini' | 'nvidia'. Every agent follows it. */
 export const setLlmProvider = spacetimedb.reducer({ provider: t.string() }, (ctx, args) => h.setLlmProvider(ctx, args));
 
+// Mesh relay ---------------------------------------------------------------------------------------
+
+/**
+ * A phone with signal uploads messages it carried for phones without signal (JSON array, see src/mesh.ts).
+ * SOS messages open a case and alert the nearest responder immediately.
+ */
+export const relayMeshMessages = spacetimedb.reducer({ payload: t.string() }, (ctx, args) => {
+  const r = h.relayMeshMessages(ctx, args);
+  console.info(`mesh relay: accepted=${r.accepted} duplicates=${r.duplicates} sos=${r.sosCases}`);
+});
+
 // Scheduled scan --------------------------------------------------------------------------------------
 
 /** Runs every SCAN_INTERVAL_SEC via the scan_schedule table. Scheduled reducers are private in 2.x. */

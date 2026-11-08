@@ -2,6 +2,18 @@
 
 Snapshot: 2026-11-07, end of build session 1. Environment: Windows 11, Node 22.18, **no SpacetimeDB CLI, no Gemini/NVIDIA keys**.
 
+## Update — mesh relay branch `mesh-relay` (2026-11-08)
+
+- **Mesh relay** for phones without signal (docs/MESH.md). Shared routing in `module/src/mesh.ts` (beacons with hops-to-signal,
+  gradient forwarding, flooding when no route, store-and-forward, dedup, 12-hop TTL). 12 unit tests.
+- Module: `mesh_message` table, `relay_mesh_messages` reducer; SOS opens a case at once, alerts the nearest responder, is never
+  auto-resolved; mesh fields on `location_ping` and `missing_case`. Verified live: dashboard's LA scenario (453 phones, 1 km)
+  delivered all 6 SOS in 4–7 hops; upload created 6 SOS cases; a repeat upload was rejected as duplicates; Gemini wrote SOS reasons.
+- Dashboard: SOS counter, SOS / mesh chips (SOS ranks first), "How this reached us", route on map, **Simulate mesh** demo.
+- `apps/mobile` (from `maryam/setup`): **DRAFT** mesh over expo-nearby-connections; type-checks against the real library but has
+  **not run on a phone**. Android↔iPhone links unsupported by the library. `src/components/app-tabs.web.tsx` (template, unchanged)
+  has a pre-existing type error.
+
 ## Update — session 3 (2026-11-08)
 
 - **Shelters removed everywhere**: `shelter_offer` table, `register_shelter` / `set_match` reducers, the Shelter agent, the

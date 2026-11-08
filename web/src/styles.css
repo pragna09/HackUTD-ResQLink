@@ -121,6 +121,9 @@ a { color: inherit; }
 .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line-2); color: var(--ink-2); }
 .chip.ok { background: var(--ok-bg); border-color: #c4ddd5; color: var(--ok); }
 .chip.warn { background: var(--warn-bg); border-color: #efdcae; color: #8a5a00; }
+.chip.sos { background: #fde8e4; border-color: #f3c2b8; color: #b3261e; font-weight: 700; }
+.counter.sos .n { color: #b3261e; }
+.mesh-status { background: rgba(255,255,255,.95); gap: 4px; }
 .chip.info { background: var(--info-bg); border-color: #c9d6ec; color: var(--info); }
 .skeleton { background: linear-gradient(90deg, var(--line-2), #f6f2ea, var(--line-2)); background-size: 200% 100%; animation: sk 1.2s infinite; border-radius: 6px; }
 @keyframes sk { to { background-position: -200% 0; } }

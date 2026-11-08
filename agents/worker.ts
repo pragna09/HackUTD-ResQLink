@@ -66,7 +66,9 @@ async function main() {
   }, env.WEATHER_INTERVAL_MIN * 60_000);
 
   // ---- Triage --------------------------------------------------------------------------------
+  // Keyed by id + SOS state: a case that later becomes an SOS (mesh relay) gets a fresh reason.
   const triaged = new Set<string>();
+  const triageKey = (c: { id: bigint; sos?: boolean }) => `${c.id}${c.sos ? ':sos' : ''}`;
   let triageRunning = false;
   const triage = async () => {
     if (triageRunning) return;
@@ -75,7 +77,7 @@ async function main() {
       for (;;) {
         const pending = db
           .cases()
-          .filter(c => c.status !== 'resolved' && c.rationale === '' && !triaged.has(String(c.id)))
+          .filter(c => c.status !== 'resolved' && c.rationale === '' && !triaged.has(triageKey(c)))
           .sort((a, b) => b.urgencyScore - a.urgencyScore);
         if (pending.length === 0) break;
         const zones = new Map(db.zones().map(z => [z.id, z]));
@@ -83,7 +85,7 @@ async function main() {
         const byZone = new Map<string, typeof pending>();
         for (const c of pending) (byZone.get(c.zoneId) ?? byZone.set(c.zoneId, []).get(c.zoneId)!).push(c);
         for (const [zoneId, cases] of byZone) {
-          cases.forEach(c => triaged.add(String(c.id)));
+          cases.forEach(c => triaged.add(triageKey(c)));
           const results = await runTriage(cases, zones.get(zoneId));
           for (const r of results) {
             await db.setRationale(r).catch(e => console.error(`[triage] case ${r.caseId}:`, e));

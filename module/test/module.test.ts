@@ -7,6 +7,7 @@ import * as moduleExports from '../src/index';
 import * as h from '../src/handlers';
 import { DEMO_ZONE, ZONES, buildSeedDataset, syntheticIdentityValue } from '../src/seed_data';
 import { SILENCE_THRESHOLD_MIN, isInsideZone } from '../src/logic';
+import { MeshNode, encodeUpload, simulateMesh } from '../src/mesh';
 
 const DATA = buildSeedDataset();
 const hexOf = (index: number) => new Identity(syntheticIdentityValue(index)).toHexString();
@@ -170,6 +171,114 @@ describe('welfare-check module', () => {
     tx(ctx => h.resetDemo(ctx));
     expect(harness.db.agentConfig.count()).toBe(1n);
     expect(harness.db.agentConfig.id.find(0)!.llmProvider).toBe('nvidia');
+  });
+
+  describe('relay_mesh_messages', () => {
+    const T0ms = Number(T0.microsSinceUnixEpoch / 1000n);
+    const high = DATA.users.find(u => u.zoneId === 'la-fire' && u.riskTier === 'high')!;
+    const highHex = hexOf(high.index);
+    // An SOS from the high-risk person, relayed through a stranger's phone to one with signal.
+    const relayed = () => {
+      const origin = new MeshNode({ id: highHex, lat: high.lat, lng: high.lng, hasSignal: false, now: () => T0ms });
+      const m = origin.originate({ kind: 'sos', displayName: high.displayName, note: 'Trapped, smoke', createdAtMs: T0ms - 5 * 60_000 });
+      const a = new MeshNode({ id: 'b'.repeat(64), lat: high.lat, lng: high.lng + 0.005, hasSignal: false, now: () => T0ms });
+      const g = new MeshNode({ id: 'c'.repeat(64), lat: high.lat, lng: high.lng + 0.01, hasSignal: true, now: () => T0ms });
+      a.receive(m);
+      g.receive(a.carried()[0]);
+      return g.tick().uploads;
+    };
+
+    it('an SOS opens a case at once (even at severity 1), alerts the nearest responder and survives a fresh heartbeat', () => {
+      const { harness, tx } = setup();
+      const uploads = relayed();
+      expect(uploads[0].path).toHaveLength(3);
+      const r = tx(ctx => h.relayMeshMessages(ctx, { payload: encodeUpload(uploads) }));
+      expect(r).toEqual({ accepted: 1, duplicates: 0, sosCases: 1 });
+
+      const c = [...harness.db.missingCase.iter()].find(x => x.user.toHexString() === highHex)!;
+      expect(c).toMatchObject({ sos: true, viaMesh: true, meshHops: 2, sosNote: 'Trapped, smoke', zoneId: 'la-fire', status: 'open' });
+      expect(c.relayedBy).toBe('phone cccccc'); // unknown identity: last 6 hex chars
+      const a = [...harness.db.alert.iter()].find(x => x.caseId === c.id)!;
+      expect(a.message).toMatch(/SOS from .*relayed phone-to-phone/);
+      expect(a.message).not.toMatch(/hop/); // hop counts stay in the backend
+      expect(a.message).toMatch(/Trapped, smoke/);
+      expect(a.message).not.toMatch(/confirmed emergency/i);
+      const row = harness.db.meshMessage.id.find(uploads[0].id)!;
+      expect(row.hops).toBe(2);
+      expect(row.pathLat).toHaveLength(3);
+      // The location keeps the phone's own time (5 min ago), not the upload time.
+      expect(harness.db.locationPing.user.find(c.user)!.timestamp.microsSinceUnixEpoch).toBe(T0.microsSinceUnixEpoch - 300_000_000n);
+
+      // A second gateway uploading the same SOS is ignored; a fresh heartbeat does not close an SOS case.
+      expect(tx(ctx => h.relayMeshMessages(ctx, { payload: encodeUpload(uploads) }))).toEqual({ accepted: 0, duplicates: 1, sosCases: 0 });
+      tx(ctx => {
+        const lp = ctx.db.locationPing.user.find(c.user)!;
+        ctx.db.locationPing.user.update({ ...lp, timestamp: ctx.timestamp });
+      });
+      tx(ctx => h.runScan(ctx));
+      expect(harness.db.missingCase.id.find(c.id)!.status).toBe('open');
+    });
+
+    it('an SOS on an existing case marks it SOS and clears the reason so triage rewrites it', () => {
+      const { harness, tx } = setup();
+      tx(ctx => h.simulateDisaster(ctx, { zoneId: 'la-fire', severity: 4 }));
+      const before = [...harness.db.missingCase.iter()].find(x => x.user.toHexString() === highHex)!;
+      tx(ctx => h.setRationale(ctx, { caseId: before.id, rationale: 'old', source: 'llm' }));
+      tx(ctx => h.relayMeshMessages(ctx, { payload: encodeUpload(relayed()) }));
+      const after = harness.db.missingCase.id.find(before.id)!;
+      expect(after).toMatchObject({ sos: true, viaMesh: true, meshHops: 2, rationale: '' });
+      expect(harness.db.missingCase.count()).toBe(6n);
+    });
+
+    it('a mesh heartbeat older than the stored location is kept as history but does not move the person', () => {
+      const { harness, tx } = setup();
+      const none = DATA.users.find(u => u.riskTier === 'none')!;
+      const id = hexOf(none.index);
+      const n = new MeshNode({ id, lat: 0, lng: 0, hasSignal: true, now: () => T0ms });
+      const old = n.originate({ kind: 'heartbeat', displayName: 'x', createdAtMs: T0ms - 60 * 60_000 });
+      tx(ctx => h.relayMeshMessages(ctx, { payload: encodeUpload([old]) }));
+      expect(harness.db.locationPing.user.find(new Identity(id))!.lat).toBe(none.lat);
+      expect(harness.db.meshMessage.count()).toBe(1n);
+    });
+
+    it('rejects malformed payloads and creates a profile for an unknown sender', () => {
+      const { harness, tx } = setup();
+      expect(() => tx(ctx => h.relayMeshMessages(ctx, { payload: '[{"bad":1}]' }))).toThrow();
+      const stranger = 'd'.repeat(64);
+      const z = ZONES[2];
+      const n = new MeshNode({ id: stranger, lat: z.centerLat, lng: z.centerLng - 0.01, hasSignal: true, now: () => T0ms });
+      tx(ctx => h.relayMeshMessages(ctx, { payload: encodeUpload([n.originate({ kind: 'sos', displayName: 'Visitor', createdAtMs: T0ms })]) }));
+      const p = harness.db.userProfile.identity.find(new Identity(stranger))!;
+      expect(p).toMatchObject({ displayName: 'Visitor', optIn: true, isSynthetic: false });
+      const c = [...harness.db.missingCase.iter()].find(x => x.user.toHexString() === stranger)!;
+      expect(c).toMatchObject({ sos: true, viaMesh: false, meshHops: 0, zoneId: z.id });
+    });
+
+    it('end to end: a simulated mesh delivers SOS messages and each becomes an SOS case in the right zone', () => {
+      const { harness, tx } = setup();
+      const zone = ZONES[1];
+      const people = DATA.users.filter(u => u.zoneId === zone.id);
+      const nodes = people.map(u => ({ id: hexOf(u.index), lat: u.lat, lng: u.lng, hasSignal: u.riskTier === 'none' }));
+      // A line of bystander phones west from each at-risk person, out past the zone edge.
+      for (const u of people.filter(p => p.riskTier !== 'none')) {
+        for (let i = 1; i <= 25; i++) nodes.push({ id: `bystander-${u.index}-${i}`, lat: u.lat, lng: u.lng - i * 0.006, hasSignal: false });
+      }
+      // Phones with signal in a ring just outside the zone.
+      for (let k = 0; k < 72; k++) {
+        const ang = (k / 72) * 2 * Math.PI;
+        nodes.push({ id: `ring-${k}`, lat: zone.centerLat + ((zone.radiusKm * 1.15) / 110.574) * Math.cos(ang), lng: zone.centerLng + ((zone.radiusKm * 1.15) / 92.3) * Math.sin(ang), hasSignal: true });
+      }
+      const origins = people.filter(u => u.riskTier !== 'none').map(u => ({ node: hexOf(u.index), kind: 'sos' as const, displayName: u.displayName, createdAtMs: T0ms }));
+      const sim = simulateMesh(nodes, origins, { rangeKm: 1, nowMs: T0ms });
+      expect(sim.delivered).toHaveLength(6);
+      tx(ctx => h.relayMeshMessages(ctx, { payload: encodeUpload(sim.delivered) }));
+      const sosCases = [...harness.db.missingCase.iter()].filter(c => c.sos);
+      expect(sosCases).toHaveLength(6);
+      for (const c of sosCases) {
+        expect(c.zoneId).toBe(zone.id);
+        expect(c.meshHops).toBeGreaterThan(0);
+      }
+    });
   });
 
   it('acknowledge_alert updates alert and case', () => {

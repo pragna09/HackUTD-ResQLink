@@ -6,6 +6,9 @@ When a disaster hits thousands of people at once, the people who need help most 
 Welfare Check finds people who **stopped sending their location inside a disaster zone**, ranks them by urgency,
 and tells the **nearest emergency center**.
 
+**No signal?** A phone-to-phone mesh relays SOS messages hop by hop to the nearest phone that still has internet,
+which uploads them; the person then appears on the dashboard and the nearest center is alerted. See [docs/MESH.md](docs/MESH.md).
+
 Pitched as a module for an insurer’s mobile app (shown as a concept; no insurer logos, not affiliated).
 Alerts are always worded as a **welfare check**, never a confirmed emergency — a dead battery looks the same as lost signal.
 
@@ -23,7 +26,8 @@ and [STATUS.md](STATUS.md) for what is verified and what is pending.
 ```
 module/   SpacetimeDB module: tables, reducers, scheduled scan, urgency score (src/logic.ts), synthetic seed (src/seed_data.ts)
 agents/   Node worker: llm.ts (provider switch), weather.ts, triage.ts, nws.ts, worker.ts
-web/      Vite + React app (/app, /dashboard)
+web/      Vite + React app (/app, /dashboard) incl. the mesh simulator (src/dashboard/meshSim.ts)
+apps/mobile/  Expo phone app: offline SOS over a Bluetooth/Wi-Fi mesh (DRAFT, needs real phones; see docs/MESH.md)
 seed/     generate.ts (dump synthetic dataset to JSON) and seed.ts (load it via reset_demo)
 docs/     ARCHITECTURE.md
 scripts/  bindings.mjs (runs `spacetime generate` for every client package)
@@ -83,7 +87,9 @@ A blue banner marks preview mode: a local mock built from the same seed and scor
 2. **Run weather research** → the Weather agent reads NWS + the zone's 5 synthetic news items → a hazard rating (badge shows `llm` or `fallback`).
 3. Or pick a scenario from **Simulate disaster ▾** (badge `simulated`): the map and zone panel switch to that city and its 6 at-risk people appear, ranked.
    The 3 high-risk people rank above the 3 medium-risk ones. Each case has a nearest center, a welfare-check alert, a Wi-Fi / no Wi-Fi tag and a one-line triage reason.
-4. Open `/app` on a phone, opt in, tick *Use demo location*. Stop the heartbeat (close the tab) → after 10 min you appear in the queue; reopen → your case resolves.
+4. **Simulate mesh (no signal)**: towers in the zone go down; watch SOS messages hop phone-to-phone on the map to the
+   nearest phones with signal, then appear as SOS cases (ranked first) with the route on the map.
+5. Open `/app` on a phone, opt in, tick *Use demo location*. Stop the heartbeat (close the tab) → after 10 min you appear in the queue; reopen → your case resolves.
 
 ## Urgency score
 

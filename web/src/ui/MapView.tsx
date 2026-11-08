@@ -3,11 +3,25 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Case, Center, Ping, Zone } from '../stdb/types';
 import { severityColor, urgencyColor } from './format';
+import type { SimNode } from '../../../module/src/mesh';
+
+/** Simulated phone network drawn during a mesh demo. */
+export interface MeshOverlay {
+  nodes: SimNode[];
+  links: Array<[string, string]>;
+  /** Hops that have happened so far. */
+  hops: Array<{ from: string; to: string }>;
+  /** Phones with signal that uploaded so far. */
+  gateways: string[];
+}
 
 interface Props {
   zones: Zone[];
   /** Zone the map frames. Re-fits whenever this changes. */
   focusZone?: Zone;
+  meshOverlay?: MeshOverlay;
+  /** Route the selected case's SOS took over the mesh, origin first. */
+  meshPath?: Array<[number, number]>;
   cases: Case[];
   pings: Ping[];
   centers: Center[];
@@ -19,7 +33,7 @@ const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 /** Plain Leaflet inside React: the map is created once; each layer group is redrawn when its data changes. */
-export function MapView({ zones, focusZone, cases, pings, centers, selectedId, onSelect }: Props) {
+export function MapView({ zones, focusZone, meshOverlay, meshPath, cases, pings, centers, selectedId, onSelect }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layers = useRef<Record<string, L.LayerGroup>>({});
@@ -30,7 +44,7 @@ export function MapView({ zones, focusZone, cases, pings, centers, selectedId, o
     if (!el.current || map.current) return;
     const m = L.map(el.current, { zoomControl: true, preferCanvas: true }).setView([32.7705, -96.8265], 12);
     L.tileLayer(TILE_URL, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(m);
-    for (const k of ['zones', 'pings', 'centers', 'links', 'cases']) layers.current[k] = L.layerGroup().addTo(m);
+    for (const k of ['zones', 'mesh', 'pings', 'centers', 'links', 'meshPath', 'cases']) layers.current[k] = L.layerGroup().addTo(m);
     map.current = m;
     const ro = new ResizeObserver(() => m.invalidateSize());
     ro.observe(el.current);
@@ -126,6 +140,50 @@ export function MapView({ zones, focusZone, cases, pings, centers, selectedId, o
       }
     }
   }, [cases, centers, selectedId]);
+
+  useEffect(() => {
+    const g = layers.current.mesh;
+    if (!g) return;
+    g.clearLayers();
+    if (!meshOverlay) return;
+    const at = new Map(meshOverlay.nodes.map(n => [n.id, n]));
+    for (const [a, b] of meshOverlay.links) {
+      const p = at.get(a)!;
+      const q = at.get(b)!;
+      L.polyline([[p.lat, p.lng], [q.lat, q.lng]], { color: '#7c818c', weight: 0.6, opacity: 0.18, interactive: false }).addTo(g);
+    }
+    for (const n of meshOverlay.nodes) {
+      L.circleMarker([n.lat, n.lng], {
+        radius: 2.2,
+        stroke: false,
+        fillColor: n.hasSignal ? '#2c5ba8' : '#7c818c',
+        fillOpacity: n.hasSignal ? 0.75 : 0.5,
+        interactive: false,
+      }).addTo(g);
+    }
+    for (const h of meshOverlay.hops) {
+      const p = at.get(h.from);
+      const q = at.get(h.to);
+      if (p && q) L.polyline([[p.lat, p.lng], [q.lat, q.lng]], { color: '#c0392b', weight: 2.5, opacity: 0.9, interactive: false }).addTo(g);
+    }
+    for (const id of new Set(meshOverlay.gateways)) {
+      const n = at.get(id);
+      if (n) L.circleMarker([n.lat, n.lng], { radius: 7, color: '#2c5ba8', weight: 2.5, fill: false }).bindTooltip('Phone with signal: uploaded the SOS').addTo(g);
+    }
+  }, [meshOverlay]);
+
+  useEffect(() => {
+    const g = layers.current.meshPath;
+    if (!g) return;
+    g.clearLayers();
+    if (!meshPath || meshPath.length < 2) return;
+    L.polyline(meshPath, { color: '#c0392b', weight: 3, dashArray: '6 5' }).bindTooltip('SOS route over the mesh').addTo(g);
+    meshPath.slice(1).forEach((p, i) =>
+      L.circleMarker(p, { radius: i === meshPath.length - 2 ? 5 : 3, color: '#c0392b', weight: 2, fillColor: i === meshPath.length - 2 ? '#2c5ba8' : '#fff', fillOpacity: 1 })
+        .bindTooltip(i === meshPath.length - 2 ? 'Phone with signal (uploaded)' : 'Relay phone')
+        .addTo(g)
+    );
+  }, [meshPath]);
 
   // Focus the selected pin.
   useEffect(() => {
