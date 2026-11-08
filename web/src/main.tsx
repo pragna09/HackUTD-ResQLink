@@ -32,6 +32,9 @@ function Home() {
   );
 }
 
+// Needed for phone notifications (Android Chrome only shows them via a service worker).
+if ('serviceWorker' in navigator) void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>

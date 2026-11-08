@@ -74,6 +74,12 @@ export const acknowledgeAlert = spacetimedb.reducer({ alertId: t.u64() }, (ctx, 
 /** Dashboard model picker: 'gemini' | 'nvidia'. Every agent follows it. */
 export const setLlmProvider = spacetimedb.reducer({ provider: t.string() }, (ctx, args) => h.setLlmProvider(ctx, args));
 
+/** Phone app check-in answer: 'safe' closes their case; 'help' opens an SOS case and alerts the nearest responder. */
+export const respondCheckIn = spacetimedb.reducer(
+  { status: t.string(), note: t.string(), hasLocation: t.bool(), lat: t.f64(), lng: t.f64(), accuracy: t.f64() },
+  (ctx, args) => h.respondCheckIn(ctx, args)
+);
+
 // Mesh relay ---------------------------------------------------------------------------------------
 
 /**

@@ -12,7 +12,7 @@ import {
   welfareCheckMessage,
   meshSosMessage,
 } from '../../../module/src/logic';
-import { decodeUpload } from '../../../module/src/mesh';
+import { decodeUpload, encodeUpload } from '../../../module/src/mesh';
 import { buildSeedDataset, prng } from '../../../module/src/seed_data';
 import type { Api, Backend, Case, LiveState, Snapshot } from './types';
 import { emptySnapshot } from './types';
@@ -37,7 +37,7 @@ function seed(): Snapshot {
   d.centers.forEach(c => s.centers.push({ ...c, isSynthetic: true }));
   d.users.forEach(u => {
     const id = `synthetic-${u.index}`;
-    s.profiles.set(id, { identity: id, displayName: u.displayName, ageGroup: u.ageGroup, phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: u.vulnerabilityFlag, vulnerabilityFlag: u.vulnerabilityFlag, hasPets: u.hasPets, hasWifi: u.hasWifi, optIn: true, isSynthetic: true, simSilent: u.silent });
+    s.profiles.set(id, { identity: id, displayName: u.displayName, ageGroup: u.ageGroup, phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: u.vulnerabilityFlag, vulnerabilityFlag: u.vulnerabilityFlag, hasPets: u.hasPets, hasWifi: u.hasWifi, checkInStatus: '', checkInAt: undefined, optIn: true, isSynthetic: true, simSilent: u.silent });
     s.pings.set(id, { user: id, lat: u.lat, lng: u.lng, accuracy: u.accuracy, at: minAgo(u.minutesAgo) });
   });
   return s;
@@ -118,13 +118,31 @@ export function createMockBackend(): Backend {
   };
 
   const api: Api = {
+    // Simplified version of the module's respond_check_in.
+    async respondCheckIn(a) {
+      const p = data.profiles.get(ME);
+      if (!p) throw new Error('Sign in first');
+      if (a.location) data.pings.set(ME, { user: ME, ...a.location, at: new Date() });
+      Object.assign(p, { checkInStatus: a.status, checkInAt: new Date(), optIn: p.optIn || a.status === 'help' });
+      const active = data.cases.find(c => c.user === ME && c.status !== 'resolved');
+      if (a.status === 'safe') {
+        if (active) active.status = 'resolved';
+      } else if (active) {
+        Object.assign(active, { sos: true, sosNote: a.note, rationale: '', status: 'open' });
+      } else {
+        const lp = data.pings.get(ME);
+        if (!lp) throw new Error('Share your location so responders can find you');
+        await this.relayMesh(encodeUpload([{ id: `app-${Date.now()}`, kind: 'sos', origin: 'f'.repeat(64), displayName: p.displayName, lat: lp.lat, lng: lp.lng, accuracy: lp.accuracy, createdAtMs: Date.now(), ttl: 12, path: [{ node: 'f'.repeat(64), lat: lp.lat, lng: lp.lng }], note: a.note }]));
+      }
+      emit();
+    },
     signOut() {
       data.profiles.delete(ME);
       data.pings.delete(ME);
       emit();
     },
     async updateProfile(a) {
-      data.profiles.set(ME, { identity: ME, ...a, vulnerabilityFlag: isVulnerable(a), hasWifi: data.profiles.get(ME)?.hasWifi ?? true, isSynthetic: false, simSilent: false });
+      data.profiles.set(ME, { identity: ME, ...a, vulnerabilityFlag: isVulnerable(a), hasWifi: data.profiles.get(ME)?.hasWifi ?? true, checkInStatus: data.profiles.get(ME)?.checkInStatus ?? '', checkInAt: data.profiles.get(ME)?.checkInAt, isSynthetic: false, simSilent: false });
       if (!a.optIn) data.pings.delete(ME);
       emit();
     },
@@ -186,7 +204,7 @@ export function createMockBackend(): Backend {
         const hops = m.path.length - 1;
         const gw = m.path[m.path.length - 1].node;
         const relayedBy = hops > 0 ? (data.profiles.get(gw)?.displayName ?? `phone ${/^[0-9a-f]{64}$/.test(gw) ? gw.slice(-6) : gw.slice(0, 24)}`) : '';
-        const profile = data.profiles.get(m.origin) ?? { identity: m.origin, displayName: m.displayName, ageGroup: 'unknown', phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: false, vulnerabilityFlag: false, hasPets: false, hasWifi: false, optIn: true, isSynthetic: false, simSilent: false };
+        const profile = data.profiles.get(m.origin) ?? { identity: m.origin, displayName: m.displayName, ageGroup: 'unknown', phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: false, vulnerabilityFlag: false, hasPets: false, hasWifi: false, checkInStatus: '', checkInAt: undefined, optIn: true, isSynthetic: false, simSilent: false };
         data.profiles.set(m.origin, profile);
         const old = data.pings.get(m.origin);
         if (!old || old.at.getTime() < m.createdAtMs) data.pings.set(m.origin, { user: m.origin, lat: m.lat, lng: m.lng, accuracy: m.accuracy, at: new Date(m.createdAtMs) });

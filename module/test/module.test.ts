@@ -301,6 +301,34 @@ describe('welfare-check module', () => {
     expect(() => save({ dependentsChildren: 21 })).toThrow();
   });
 
+  it('respond_check_in: "help" opens an SOS case and alerts; "safe" closes it; the answer survives a profile save', () => {
+    const { harness, tx } = setup();
+    const profile = { displayName: 'Maria G.', phone: '+1 214 555 0100', ageGroup: '18-64', dependentsChildren: 1, dependentsElderly: 0, needsAccessible: false, hasPets: false, optIn: false };
+    const z = ZONES[0];
+    let me!: Identity;
+    tx(ctx => {
+      me = ctx.sender;
+      h.updateProfile(ctx, profile);
+    });
+    const at = { hasLocation: true, lat: z.centerLat, lng: z.centerLng, accuracy: 20 };
+    expect(() => tx(ctx => h.respondCheckIn(ctx, { status: 'maybe', note: '', ...at }))).toThrow();
+
+    tx(ctx => h.respondCheckIn(ctx, { status: 'help', note: 'Roof collapsed', ...at }));
+    const c = [...harness.db.missingCase.iter()].find(x => x.user.toHexString() === me.toHexString())!;
+    expect(c).toMatchObject({ sos: true, sosNote: 'Roof collapsed', viaMesh: false, zoneId: z.id, status: 'open', vulnerabilityFlag: true });
+    const a = [...harness.db.alert.iter()].find(x => x.caseId === c.id)!;
+    expect(a.message).toMatch(/Help requested by Maria G\. from the app check-in/);
+    expect(a.message).not.toMatch(/confirmed emergency/i);
+    expect(harness.db.userProfile.identity.find(me)!).toMatchObject({ checkInStatus: 'help', optIn: true });
+
+    tx(ctx => h.updateProfile(ctx, { ...profile, optIn: true }));
+    expect(harness.db.userProfile.identity.find(me)!.checkInStatus).toBe('help');
+
+    tx(ctx => h.respondCheckIn(ctx, { status: 'safe', note: '', ...at }));
+    expect(harness.db.missingCase.id.find(c.id)!.status).toBe('resolved');
+    expect(harness.db.userProfile.identity.find(me)!.checkInStatus).toBe('safe');
+  });
+
   it('acknowledge_alert updates alert and case', () => {
     const { harness, tx } = setup();
     tx(ctx => h.simulateDisaster(ctx, { zoneId: DEMO_ZONE.id, severity: 4 }));

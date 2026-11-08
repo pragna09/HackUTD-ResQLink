@@ -40,6 +40,7 @@ import PingReducer from "./ping_reducer";
 import RelayMeshMessagesReducer from "./relay_mesh_messages_reducer";
 import RequestResearchReducer from "./request_research_reducer";
 import ResetDemoReducer from "./reset_demo_reducer";
+import RespondCheckInReducer from "./respond_check_in_reducer";
 import SetLlmProviderReducer from "./set_llm_provider_reducer";
 import SetRationaleReducer from "./set_rationale_reducer";
 import SilenceUsersReducer from "./silence_users_reducer";
@@ -185,6 +186,7 @@ const reducersSchema = __reducers(
   __reducerSchema("relay_mesh_messages", RelayMeshMessagesReducer),
   __reducerSchema("request_research", RequestResearchReducer),
   __reducerSchema("reset_demo", ResetDemoReducer),
+  __reducerSchema("respond_check_in", RespondCheckInReducer),
   __reducerSchema("set_llm_provider", SetLlmProviderReducer),
   __reducerSchema("set_rationale", SetRationaleReducer),
   __reducerSchema("silence_users", SilenceUsersReducer),

@@ -4,7 +4,22 @@ import { DbConnection } from '@bindings';
 import type { Api, Backend, LiveState, Snapshot } from './types';
 import { emptySnapshot } from './types';
 
-const URI = import.meta.env.VITE_STDB_URI ?? 'ws://localhost:3000';
+/**
+ * SpacetimeDB address. If it points at localhost but the page was opened from another device (a phone on the
+ * laptop's hotspot via http://192.168.137.1:5173), use the page's host instead: on a phone, localhost is the phone.
+ */
+const URI = (() => {
+  const configured = import.meta.env.VITE_STDB_URI ?? 'ws://localhost:3000';
+  try {
+    const u = new URL(configured);
+    const pageHost = window.location.hostname;
+    const local = (h: string) => h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
+    if (local(u.hostname) && !local(pageHost)) u.hostname = pageHost;
+    return u.toString().replace(/\/$/, '');
+  } catch {
+    return configured;
+  }
+})();
 const DB = import.meta.env.VITE_STDB_DB ?? 'welfare-check';
 const TOKEN_KEY = 'welfare-check.token';
 
@@ -41,6 +56,8 @@ function readSnapshot(conn: any): Snapshot {
       vulnerabilityFlag: r.vulnerabilityFlag,
       hasPets: r.hasPets,
       hasWifi: r.hasWifi,
+      checkInStatus: r.checkInStatus,
+      checkInAt: r.checkInAt ? date(r.checkInAt) : undefined,
       optIn: r.optIn,
       isSynthetic: r.isSynthetic,
       simSilent: r.simSilent,
@@ -157,6 +174,15 @@ export function createLiveBackend(): Backend {
 
   const api: Api = {
     updateProfile: async a => need().reducers.updateProfile(a),
+    respondCheckIn: async a =>
+      need().reducers.respondCheckIn({
+        status: a.status,
+        note: a.note,
+        hasLocation: !!a.location,
+        lat: a.location?.lat ?? 0,
+        lng: a.location?.lng ?? 0,
+        accuracy: a.location?.accuracy ?? 0,
+      }),
     signOut: () => {
       try {
         localStorage.removeItem(TOKEN_KEY);

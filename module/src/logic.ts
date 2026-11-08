@@ -138,5 +138,15 @@ export function isVulnerable(p: { needsAccessible: boolean; dependentsChildren: 
   return p.needsAccessible || p.dependentsChildren > 0 || p.dependentsElderly > 0;
 }
 
+/** Alert wording when someone answers "I need help" in the app's check-in. Never says "confirmed emergency". */
+export function helpRequestMessage(args: { displayName: string; note: string; zoneName: string; centerName: string; centerKm: number }): string {
+  return (
+    `Help requested by ${args.displayName} from the app check-in, inside ${args.zoneName}. ` +
+    `Last position ${args.centerKm.toFixed(1)} km from ${args.centerName}.` +
+    (args.note ? ` Their message: "${args.note}".` : '') +
+    ' Unverified — please send a welfare check.'
+  );
+}
+
 /** Center types that receive welfare-check alerts. */
 export const RESPONDER_TYPES = ['police', 'fire', 'hospital'] as const;

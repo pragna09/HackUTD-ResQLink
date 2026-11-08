@@ -26,5 +26,6 @@ export default defineConfig({
     alias: { '@bindings': hasBindings ? bindingsDir : stub },
   },
   // Shared pure logic (urgency weights, haversine, seed data) lives in ../module/src.
-  server: { fs: { allow: ['..'] }, port: 5173 },
+  // host: true listens on every network interface, so phones on the laptop's hotspot can open the demo.
+  server: { fs: { allow: ['..'] }, port: 5173, host: true },
 });

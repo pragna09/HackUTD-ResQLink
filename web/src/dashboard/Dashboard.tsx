@@ -75,6 +75,7 @@ export function Dashboard() {
   };
 
   // ---- Mesh demo: run the real routing over a simulated phone network, animate it, then upload as the gateway would.
+  const [showPhone, setShowPhone] = useState(false);
   const [mesh, setMesh] = useState<{ scenario: MeshScenario; step: number; uploaded: boolean } | null>(null);
   const startMesh = () => {
     if (!zone) return;
@@ -120,7 +121,7 @@ export function Dashboard() {
         <Counter cls="sos" n={offline ? null : counters.sos} label="SOS" loading={loading} />
         <Counter cls="flag" n={offline ? null : counters.flagged} label="Flagged" loading={loading} />
         <Counter cls="alert" n={offline ? null : counters.alerted} label={`Alerted · ${counters.acknowledged} ack`} loading={loading} />
-        <DemoControls zone={zone} zones={data.zones} llmProvider={data.llmProvider} onShowZone={showZone} onMesh={startMesh} meshBusy={!!mesh && !mesh.uploaded} run={run} disabled={!zone} />
+        <DemoControls zone={zone} zones={data.zones} llmProvider={data.llmProvider} onShowZone={showZone} onMesh={startMesh} meshBusy={!!mesh && !mesh.uploaded} showPhone={showPhone} onTogglePhone={() => setShowPhone(v => !v)} run={run} disabled={!zone} />
       </div>
 
       <main className="dash-main">
@@ -225,6 +226,20 @@ export function Dashboard() {
         </span>
         <span>All people, centers and news are synthetic. Concept prototype — not affiliated with any insurer.</span>
       </footer>
+      {showPhone && zone && (
+        <aside className="phone-preview" aria-label="Phone app preview">
+          <div className="phone-preview-bar">
+            <span>Phone app · {ZONES.find(z => z.id === zone.id)?.city ?? zone.name}</span>
+            <button className="btn ghost small" onClick={() => setShowPhone(false)} aria-label="Close phone preview">
+              ✕
+            </button>
+          </div>
+          <div className="phone-frame">
+            {/* Same browser = same signed-in demo user as /app. The demo location follows the selected city. */}
+            <iframe key={zone.id} title="Phone app" src={`/app?embed=1&zone=${encodeURIComponent(zone.id)}`} />
+          </div>
+        </aside>
+      )}
       <Toast msg={toast.msg} />
     </div>
   );
@@ -255,10 +270,12 @@ function DemoControls(props: {
   onShowZone: (id: string) => void;
   onMesh: () => void;
   meshBusy: boolean;
+  showPhone: boolean;
+  onTogglePhone: () => void;
   run: (l: string, f: () => Promise<void>) => void;
   disabled: boolean;
 }) {
-  const { zone, zones, llmProvider, onShowZone, onMesh, meshBusy, run, disabled } = props;
+  const { zone, zones, llmProvider, onShowZone, onMesh, meshBusy, showPhone, onTogglePhone, run, disabled } = props;
   const api = useApi();
   // One entry per seeded scenario present in the database, in seed order (Dallas, LA, Miami).
   const scenarios = ZONES.filter(s => zones.some(z => z.id === s.id)).map(s => ({
@@ -334,6 +351,9 @@ function DemoControls(props: {
         onClick={onMesh}
       >
         {meshBusy ? 'Mesh relaying…' : 'Simulate mesh (no signal)'}
+      </button>
+      <button className={`btn${showPhone ? ' primary' : ''}`} onClick={onTogglePhone} aria-pressed={showPhone}>
+        {showPhone ? 'Hide phone' : 'Show phone'}
       </button>
       <button
         className="btn danger"
@@ -535,6 +555,14 @@ function CaseDetail(props: { c: Case | null; hasWifi?: boolean; profile?: Profil
               .filter(Boolean)
               .join(' · ') || 'lives alone, no pets, no accessibility needs'}
             {profile.phone && <span className="muted"> · {profile.phone}</span>}
+            {profile.checkInStatus && (
+              <div style={{ marginTop: 4 }}>
+                <span className={`chip ${profile.checkInStatus === 'safe' ? 'ok' : 'sos'}`}>
+                  {profile.checkInStatus === 'safe' ? 'said they are safe' : 'asked for help'}
+                </span>{' '}
+                <span className="muted">{profile.checkInAt ? ago(profile.checkInAt) : ''}</span>
+              </div>
+            )}
           </div>
         )}
         {hasWifi !== undefined && (

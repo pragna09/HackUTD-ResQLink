@@ -21,6 +21,8 @@ export default __t.row({
   needsAccessible: __t.bool().name("needs_accessible"),
   hasPets: __t.bool().name("has_pets"),
   hasWifi: __t.bool().name("has_wifi"),
+  checkInStatus: __t.string().name("check_in_status"),
+  checkInAt: __t.option(__t.timestamp()).name("check_in_at"),
   optIn: __t.bool().name("opt_in"),
   isSynthetic: __t.bool().name("is_synthetic"),
   simSilent: __t.bool().name("sim_silent"),

@@ -126,6 +126,8 @@ export const UserProfile = __t.object("UserProfile", {
   needsAccessible: __t.bool(),
   hasPets: __t.bool(),
   hasWifi: __t.bool(),
+  checkInStatus: __t.string(),
+  checkInAt: __t.option(__t.timestamp()),
   optIn: __t.bool(),
   isSynthetic: __t.bool(),
   simSilent: __t.bool(),

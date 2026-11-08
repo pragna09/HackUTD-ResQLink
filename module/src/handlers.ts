@@ -9,6 +9,7 @@ import {
   SILENCE_THRESHOLD_MIN,
   RESPONDER_TYPES,
   isInsideZone,
+  helpRequestMessage,
   isVulnerable,
   meshSosMessage,
   minutesBetweenMicros,
@@ -69,6 +70,8 @@ export function updateProfile(ctx: Ctx, a: ProfileArgs) {
     hasPets: a.hasPets,
     // The /app form does not ask about Wi-Fi yet; keep any existing value, default to true.
     hasWifi: ctx.db.userProfile.identity.find(ctx.sender)?.hasWifi ?? true,
+    checkInStatus: ctx.db.userProfile.identity.find(ctx.sender)?.checkInStatus ?? '',
+    checkInAt: ctx.db.userProfile.identity.find(ctx.sender)?.checkInAt,
     optIn: a.optIn,
     isSynthetic: false,
     simSilent: false,
@@ -252,7 +255,7 @@ function scoreFields(profile: Profile, lp: Ping, zone: Zone, silentMinutes: numb
 /** Insert a case, pick the nearest responder with haversine and send its alert. Shared by the scan and the mesh relay. */
 function openCase(
   ctx: Ctx,
-  a: { profile: Profile; lp: Ping; zone: Zone; silentMinutes: number; sos?: { note: string; minutesAgo: number } }
+  a: { profile: Profile; lp: Ping; zone: Zone; silentMinutes: number; sos?: { note: string; minutesAgo: number; fromApp?: boolean } }
 ): Case {
   const near = nearest(a.lp, responders(ctx));
   const inserted = ctx.db.missingCase.insert({
@@ -279,7 +282,9 @@ function openCase(
       id: 0n,
       caseId: inserted.id,
       centerId: near.item.id,
-      message: a.sos
+      message: a.sos?.fromApp
+        ? helpRequestMessage({ displayName: a.profile.displayName, note: a.sos.note, zoneName: a.zone.name, centerName: near.item.name, centerKm: near.km })
+        : a.sos
         ? meshSosMessage({
             displayName: a.profile.displayName,
             minutesAgo: a.sos.minutesAgo,
@@ -353,6 +358,74 @@ export function runScan(ctx: Ctx): ScanResult {
 }
 
 // ---------------------------------------------------------------------------------------------
+// "Are you safe?" check-in from the phone app
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * respond_check_in. The phone app asks "Are you safe or do you need help?" when the person's area becomes a
+ * disaster zone and their phone has signal.
+ *  - 'safe': records the answer and closes any open case for them (including an SOS).
+ *  - 'help': records the answer and opens an SOS case (or marks the open one SOS), alerting the nearest responder.
+ * The current location is optional; when given it is stored as a fresh heartbeat (asking for help is consent).
+ */
+export function respondCheckIn(
+  ctx: Ctx,
+  a: { status: string; note: string; hasLocation: boolean; lat: number; lng: number; accuracy: number }
+) {
+  if (a.status !== 'safe' && a.status !== 'help') throw new SenderError('Answer must be safe or help');
+  const profile = ctx.db.userProfile.identity.find(ctx.sender);
+  if (!profile) throw new SenderError('Sign in first');
+  const note = a.note.trim().slice(0, 160);
+
+  if (a.hasLocation) {
+    if (!isLat(a.lat) || !isLng(a.lng)) throw new SenderError('Invalid coordinates');
+    if (a.status === 'help' || profile.optIn) {
+      const row = { user: ctx.sender, lat: a.lat, lng: a.lng, accuracy: Math.max(0, a.accuracy || 0), timestamp: ctx.timestamp, ...DIRECT };
+      if (ctx.db.locationPing.user.find(ctx.sender)) ctx.db.locationPing.user.update(row);
+      else ctx.db.locationPing.insert(row);
+    }
+  }
+  const updated = ctx.db.userProfile.identity.update({
+    ...profile,
+    optIn: profile.optIn || a.status === 'help',
+    checkInStatus: a.status,
+    checkInAt: ctx.timestamp,
+    updatedAt: ctx.timestamp,
+  });
+
+  const active = activeCaseFor(ctx, ctx.sender);
+  if (a.status === 'safe') {
+    if (active) ctx.db.missingCase.id.update({ ...active, status: 'resolved', updatedAt: ctx.timestamp });
+    return;
+  }
+
+  if (active) {
+    ctx.db.missingCase.id.update({
+      ...active,
+      sos: true,
+      sosNote: note,
+      rationale: active.sos ? active.rationale : '',
+      rationaleSource: active.sos ? active.rationaleSource : '',
+      status: 'open',
+      updatedAt: ctx.timestamp,
+    });
+    return;
+  }
+  const lp = ctx.db.locationPing.user.find(ctx.sender);
+  if (!lp) throw new SenderError('Share your location so responders can find you');
+  const zones = [...ctx.db.zone.iter()];
+  const zone = zoneAt(zones, lp) ?? nearest(lp, zones.map(z => ({ ...z, lat: z.centerLat, lng: z.centerLng })))?.item;
+  if (!zone) throw new SenderError('No disaster zone is set up');
+  openCase(ctx, {
+    profile: updated,
+    lp,
+    zone,
+    silentMinutes: minutesBetweenMicros(ctx.timestamp.microsSinceUnixEpoch, lp.timestamp.microsSinceUnixEpoch),
+    sos: { note, minutesAgo: 0, fromApp: true },
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
 // Mesh relay: a phone with signal uploads what it carried for phones without signal
 // ---------------------------------------------------------------------------------------------
 
@@ -415,7 +488,7 @@ export function relayMeshMessages(ctx: Ctx, a: { payload: string }): RelayResult
         displayName: m.displayName.trim() || 'Unknown (mesh)',
         ageGroup: 'unknown',
         vulnerabilityFlag: false,
-        phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: false,
+        phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: false, checkInStatus: '', checkInAt: undefined,
         hasPets: false,
         hasWifi: false,
         optIn: true,
@@ -578,7 +651,7 @@ export function loadSeed(ctx: Ctx) {
       ageGroup: u.ageGroup,
       vulnerabilityFlag: u.vulnerabilityFlag,
       // Synthetic high-risk people are marked as needing accessibility support so their flag matches the rule.
-      phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: u.vulnerabilityFlag,
+      phone: '', dependentsChildren: 0, dependentsElderly: 0, needsAccessible: u.vulnerabilityFlag, checkInStatus: '', checkInAt: undefined,
       hasPets: u.hasPets,
       hasWifi: u.hasWifi,
       optIn: true,

@@ -1,17 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { HEARTBEAT_INTERVAL_SEC } from '../../../module/src/logic';
-import { DEMO_ZONE } from '../../../module/src/seed_data';
+import { DEMO_ZONE, ZONES } from '../../../module/src/seed_data';
 import { useApi, useLive } from '../stdb/store';
 import type { Profile, ProfileInput } from '../stdb/types';
 import { Toast, TopBar } from '../ui/Chrome';
 import { ago } from '../ui/format';
 import { errText, useToast } from '../ui/useToast';
 import { useHeartbeat, type Fix } from './heartbeat';
+import { CheckIn } from './CheckIn';
 
 const AGE_GROUPS = ['0-17', '18-64', '65+'] as const;
 const PHONE_RE = /^\+?[0-9 ()-]{7,20}$/;
 // A fixed point inside the synthetic zone so the flow can be demoed from anywhere.
-const DEMO_FIX: Fix = { lat: DEMO_ZONE.centerLat + 0.004, lng: DEMO_ZONE.centerLng - 0.006, accuracy: 25 };
+// ?embed=1 = shown inside the dashboard's phone preview: no top bar, demo location on by default.
+// ?zone=<id> = put the demo location in that zone (the dashboard passes its selected city).
+const params = new URLSearchParams(window.location.search);
+const EMBED = params.get('embed') === '1';
+const demoZone = ZONES.find(z => z.id === params.get('zone')) ?? DEMO_ZONE;
+const DEMO_FIX: Fix = { lat: demoZone.centerLat + 0.004, lng: demoZone.centerLng - 0.006, accuracy: 25 };
 
 const blank: ProfileInput = {
   displayName: '',
@@ -41,8 +47,8 @@ export function PhoneApp() {
   const connecting = live.mode === 'spacetimedb' && live.status === 'connecting';
 
   return (
-    <div style={{ minHeight: '100%' }}>
-      <TopBar live={live} />
+    <div style={{ minHeight: '100%' }} className={EMBED ? 'embedded' : undefined}>
+      {!EMBED && <TopBar live={live} />}
       <div className="phone-bg">
         <div className="phone">
           {connecting ? (
@@ -150,7 +156,7 @@ function Home({ me }: { me: Profile }) {
   const api = useApi();
   const toast = useToast();
   const [form, setForm] = useState<ProfileInput>(() => fromProfile(me));
-  const [useDemo, setUseDemo] = useState(false);
+  const [useDemo, setUseDemo] = useState(EMBED);
   const [saving, setSaving] = useState(false);
   const set = (patch: Partial<ProfileInput>) => setForm(f => ({ ...f, ...patch }));
 
@@ -205,6 +211,8 @@ function Home({ me }: { me: Profile }) {
         </button>
       </header>
 
+      <CheckIn me={me} demoFix={useDemo ? DEMO_FIX : null} show={toast.show} />
+
       {myCase && (
         <div className="panel card" style={{ borderColor: 'var(--u2)', background: 'var(--warn-bg)' }}>
           <b>A welfare check is open for you.</b>
@@ -245,7 +253,7 @@ function Home({ me }: { me: Profile }) {
             <label className="check" style={{ padding: '6px 10px', flex: 1 }}>
               <input type="checkbox" checked={useDemo} onChange={e => setUseDemo(e.target.checked)} />
               <span className="small">
-                Use demo location <small>inside the Dallas demo zone</small>
+                Use demo location <small>inside the {demoZone.city} demo zone</small>
               </span>
             </label>
           </div>

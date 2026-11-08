@@ -23,6 +23,9 @@ export const userProfile = table(
     hasPets: t.bool(),
     /** Whether the person has Wi-Fi at home. Shown to responders; not part of the urgency score. */
     hasWifi: t.bool(),
+    /** Answer to the "Are you safe?" check-in: '' (not asked/answered) | 'safe' | 'help'. */
+    checkInStatus: t.string(),
+    checkInAt: t.option(t.timestamp()),
     optIn: t.bool(),
     isSynthetic: t.bool(),
     /** Synthetic users only: true = simulated phone has gone quiet, so the scan stops refreshing its ping. */

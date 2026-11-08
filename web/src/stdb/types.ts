@@ -12,6 +12,9 @@ export interface Profile {
   vulnerabilityFlag: boolean;
   hasPets: boolean;
   hasWifi: boolean;
+  /** Answer to the "Are you safe?" check-in: '' | 'safe' | 'help'. */
+  checkInStatus: string;
+  checkInAt: Date | undefined;
   optIn: boolean;
   isSynthetic: boolean;
   simSilent: boolean;
@@ -155,6 +158,8 @@ export interface Api {
   updateProfile(a: ProfileInput): Promise<void>;
   /** Demo sign-out: forget this browser's identity and start fresh. */
   signOut(): void;
+  /** "Are you safe?" answer. 'help' opens an SOS case; 'safe' closes the person's case. */
+  respondCheckIn(a: { status: 'safe' | 'help'; note: string; location?: { lat: number; lng: number; accuracy: number } }): Promise<void>;
   ping(a: { lat: number; lng: number; accuracy: number }): Promise<void>;
   requestResearch(zoneId: string): Promise<void>;
   simulateDisaster(zoneId: string, severity: number): Promise<void>;
