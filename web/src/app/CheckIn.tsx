@@ -148,7 +148,7 @@ export function CheckIn({ me, demoFix, show }: { me: Profile; demoFix: Loc | nul
         <button className="push-banner" onClick={() => setOpen(true)} aria-label="Disaster alert notification: tap to answer">
           <span className="push-icon" aria-hidden>!</span>
           <span className="push-text">
-            <span className="push-app">Welfare Check · now</span>
+            <span className="push-app">ResQLink · now</span>
             <b>Disaster alert: {zone.name.replace(' (synthetic)', '')}</b>
             <span>Are you safe, or do you need help? Tap to answer.</span>
           </span>
