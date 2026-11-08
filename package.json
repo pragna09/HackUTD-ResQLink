@@ -19,6 +19,11 @@
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.14.0",
+    "tsx": "^4.23.15",
     "typescript-eslint": "^8.72.1"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.12.0",
+    "openai": "^7.53.0"
   }
 }
