@@ -312,3 +312,15 @@ a { color: inherit; }
 .push-text { display: grid; gap: 1px; font-size: 13px; line-height: 1.3; }
 .push-app { font-size: 11px; color: var(--ink-3); }
 @keyframes push-in { from { transform: translate(-50%, -120%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+/* ---------- Agent pipeline ---------- */
+.pipeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pipeline li { display: flex; gap: 10px; align-items: flex-start; }
+.pipeline .dot { flex: none; width: 12px; height: 12px; margin-top: 3px; border-radius: 50%; border: 2px solid var(--line); background: #fff; }
+.pipeline li.done .dot { background: var(--ok); border-color: var(--ok); }
+.dispatch-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.dispatch-list li { display: flex; align-items: center; gap: 6px; }
+.advice { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--warn-bg); border: 1px solid #efdcae; font-size: 13px; }
+.advice-h { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.advice-w { font-weight: 700; margin-bottom: 4px; }
+.advice ol { margin: 0; padding-left: 18px; }

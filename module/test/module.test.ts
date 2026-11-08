@@ -6,7 +6,7 @@ import spacetimedb from '../src/schema';
 import * as moduleExports from '../src/index';
 import * as h from '../src/handlers';
 import { DEMO_ZONE, ZONES, buildSeedDataset, syntheticIdentityValue } from '../src/seed_data';
-import { SILENCE_THRESHOLD_MIN, isInsideZone } from '../src/logic';
+import { SILENCE_THRESHOLD_MIN, isInsideZone, mandatoryServices, planDispatch } from '../src/logic';
 import { MeshNode, encodeUpload, simulateMesh } from '../src/mesh';
 
 const DATA = buildSeedDataset();
@@ -30,7 +30,8 @@ describe('welfare-check module', () => {
     for (const z of harness.db.zone.iter()) expect(z.severity).toBe(1);
     expect(harness.db.userProfile.count()).toBe(30n);
     expect(harness.db.locationPing.count()).toBe(30n);
-    expect(harness.db.emergencyCenter.count()).toBe(9n);
+    expect(harness.db.emergencyCenter.count()).toBe(12n);
+    expect([...harness.db.emergencyCenter.iter()].filter(c => c.type === 'insurer')).toHaveLength(3);
     expect(harness.db.newsItem.count()).toBe(15n);
     expect(harness.db.scanSchedule.count()).toBe(1n);
   });
@@ -327,6 +328,75 @@ describe('welfare-check module', () => {
     tx(ctx => h.respondCheckIn(ctx, { status: 'safe', note: '', ...at }));
     expect(harness.db.missingCase.id.find(c.id)!.status).toBe('resolved');
     expect(harness.db.userProfile.identity.find(me)!.checkInStatus).toBe('safe');
+  });
+
+  describe('agent pipeline', () => {
+    it('code decides the minimum services per disaster; needs and the insurer are added on top', () => {
+      expect(mandatoryServices('flood')).toEqual(['fire', 'hospital']);
+      expect(mandatoryServices('earthquake')).toEqual(['fire', 'hospital']);
+      expect(mandatoryServices('wildfire')).toEqual(['fire', 'hospital']);
+      expect(mandatoryServices('unknown')).toEqual(['police', 'hospital']);
+      const centers = DATA.centers;
+      const z = ZONES[0];
+      const plan = planDispatch({ lat: z.centerLat, lng: z.centerLng }, 'earthquake', ['security'], centers);
+      expect(plan.map(p => [p.type, p.reason])).toEqual([
+        ['fire', 'hazard'],
+        ['hospital', 'hazard'],
+        ['police', 'need'],
+        ['insurer', 'always'],
+      ]);
+      expect(plan.every(p => p.km < 10)).toBe(true); // all in the same city
+    });
+
+    it('Monitor: re-rating a zone clears its advice; set_zone_advice writes the new one', () => {
+      const { harness, tx } = setup();
+      const z = ZONES[2];
+      tx(ctx => h.setZoneAdvice(ctx, { zoneId: z.id, warning: 'Flash flood warning', instructions: ['Move to higher ground', 'Avoid driving through water'], source: 'llm' }));
+      expect(harness.db.zone.id.find(z.id)!).toMatchObject({ safetyWarning: 'Flash flood warning', adviceSource: 'llm' });
+      expect(harness.db.zone.id.find(z.id)!.safetyAdvice).toHaveLength(2);
+      tx(ctx => h.simulateDisaster(ctx, { zoneId: z.id, severity: 4 }));
+      expect(harness.db.zone.id.find(z.id)!).toMatchObject({ safetyWarning: '', adviceSource: '' });
+      expect(() => tx(ctx => h.setZoneAdvice(ctx, { zoneId: z.id, warning: 'x', instructions: [], source: 'llm' }))).toThrow();
+    });
+
+    it('Triage needs feed Dispatch; Dispatch must cover the disaster\'s services and alerts each one once', () => {
+      const { harness, tx } = setup();
+      const z = ZONES[0]; // earthquake: fire + hospital required
+      tx(ctx => h.simulateDisaster(ctx, { zoneId: z.id, severity: 4 }));
+      const c = [...harness.db.missingCase.iter()].find(x => x.vulnerabilityFlag)!;
+      tx(ctx => h.setRationale(ctx, { caseId: c.id, rationale: 'Vulnerable and silent.', source: 'llm', needs: ['medical', 'rescue', 'made-up'] }));
+      expect(harness.db.missingCase.id.find(c.id)!.needs).toEqual(['medical', 'rescue']);
+
+      const byType = (t: string) => [...harness.db.emergencyCenter.iter()].find(x => x.type === t && isInsideZone(x, { ...z, radiusKm: 10 }))!;
+      // Dropping the hospital is refused (unless the nearest-center alert already reached one).
+      // Read center ids before opening a transaction (reading the harness db inside one crashes the test engine).
+      const insurerOnly = [byType('insurer').id];
+      expect(() => tx(ctx => h.dispatchCase(ctx, { caseId: c.id, centerIds: insurerOnly, message: 'Help', source: 'llm' }))).toThrow(); // the module reports which service is missing
+
+      const ids = [byType('fire').id, byType('hospital').id, byType('insurer').id];
+      tx(ctx => h.dispatchCase(ctx, { caseId: c.id, centerIds: ids, message: 'SOS: vulnerable person, earthquake zone.', source: 'llm' }));
+      const alerts = [...harness.db.alert.caseId.filter(c.id)];
+      expect(new Set(alerts.map(a => a.centerId)).size).toBe(alerts.length); // no center twice
+      expect(alerts.filter(a => a.role === 'nearest')).toHaveLength(1);
+      expect(alerts.filter(a => a.role === 'dispatch').length).toBeGreaterThanOrEqual(1);
+      expect(alerts.some(a => a.role === 'insurer')).toBe(true);
+      expect(harness.db.missingCase.id.find(c.id)!).toMatchObject({ dispatched: true, dispatchSource: 'llm' });
+      expect(() => tx(ctx => h.dispatchCase(ctx, { caseId: c.id, centerIds: ids, message: 'again', source: 'llm' }))).toThrow(); // dispatched once
+    });
+
+    it('a new SOS on a dispatched case re-runs triage and dispatch', () => {
+      const { harness, tx } = setup();
+      const z = ZONES[0];
+      tx(ctx => h.simulateDisaster(ctx, { zoneId: z.id, severity: 4 }));
+      const c = [...harness.db.missingCase.iter()][0];
+      tx(ctx => h.setRationale(ctx, { caseId: c.id, rationale: 'r', source: 'llm', needs: [] }));
+      const all = [...harness.db.emergencyCenter.iter()].filter(x => isInsideZone(x, { ...z, radiusKm: 10 })).map(x => x.id);
+      tx(ctx => h.dispatchCase(ctx, { caseId: c.id, centerIds: all, message: 'm', source: 'fallback' }));
+      const T0ms = Number(T0.microsSinceUnixEpoch / 1000n);
+      const origin = new MeshNode({ id: c.user.toHexString(), lat: c.lastLat, lng: c.lastLng, hasSignal: true, now: () => T0ms });
+      tx(ctx => h.relayMeshMessages(ctx, { payload: encodeUpload([origin.originate({ kind: 'sos', displayName: 'x', createdAtMs: T0ms })]) }));
+      expect(harness.db.missingCase.id.find(c.id)!).toMatchObject({ sos: true, rationale: '', dispatched: false });
+    });
   });
 
   it('acknowledge_alert updates alert and case', () => {

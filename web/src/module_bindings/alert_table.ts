@@ -15,6 +15,7 @@ export default __t.row({
   caseId: __t.u64().name("case_id"),
   centerId: __t.u32().name("center_id"),
   message: __t.string(),
+  role: __t.string(),
   status: __t.string(),
   timestamp: __t.timestamp(),
 });

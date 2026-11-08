@@ -148,5 +148,63 @@ export function helpRequestMessage(args: { displayName: string; note: string; zo
   );
 }
 
+// ---------------------------------------------------------------------------------------------
+// Agent pipeline rules (code decides the minimum; agents may only add)
+// ---------------------------------------------------------------------------------------------
+
+export const SERVICE_TYPES = ['police', 'fire', 'hospital'] as const;
+export type ServiceType = (typeof SERVICE_TYPES)[number];
+/** What the Triage agent may say a person needs. */
+export const NEEDS = ['medical', 'rescue', 'evacuation', 'security'] as const;
+export type Need = (typeof NEEDS)[number];
+/** Which service a need calls for. 'fire' stands for fire & rescue / search-and-rescue. */
+export const NEED_SERVICE: Record<Need, ServiceType> = { medical: 'hospital', rescue: 'fire', evacuation: 'fire', security: 'police' };
+
+/** Services every case in this kind of disaster must reach, whatever the agents say. */
+export function mandatoryServices(hazard: string): ServiceType[] {
+  const h = hazard.toLowerCase();
+  if (/flood|hurricane|storm|surge|tsunami/.test(h)) return ['fire', 'hospital'];
+  if (/quake|collapse|landslide/.test(h)) return ['fire', 'hospital'];
+  if (/fire|smoke/.test(h)) return ['fire', 'hospital'];
+  if (/tornado|wind/.test(h)) return ['fire', 'hospital', 'police'];
+  return ['police', 'hospital'];
+}
+
+export interface DispatchTarget<T> {
+  type: ServiceType | 'insurer';
+  center: T;
+  km: number;
+  /** Why it is included: the disaster type, a triage need, or always (insurer). */
+  reason: 'hazard' | 'need' | 'always';
+}
+
+/**
+ * Dispatch plan: nearest center of every mandatory service type for the hazard, plus a service for each triage
+ * need, plus the nearest insurer desk. Shared by the Dispatch agent (to build its prompt) and the module (to
+ * re-check that nothing mandatory was dropped).
+ */
+export function planDispatch<T extends LatLng & { type: string }>(
+  at: LatLng,
+  hazard: string,
+  needs: readonly string[],
+  centers: readonly T[],
+  extra: readonly string[] = []
+): DispatchTarget<T>[] {
+  const want = new Map<ServiceType | 'insurer', DispatchTarget<T>['reason']>();
+  for (const t of mandatoryServices(hazard)) want.set(t, 'hazard');
+  for (const n of needs) {
+    const t = NEED_SERVICE[n as Need];
+    if (t && !want.has(t)) want.set(t, 'need');
+  }
+  for (const t of extra) if ((SERVICE_TYPES as readonly string[]).includes(t) && !want.has(t as ServiceType)) want.set(t as ServiceType, 'need');
+  want.set('insurer', 'always');
+  const out: DispatchTarget<T>[] = [];
+  for (const [type, reason] of want) {
+    const near = nearest(at, centers.filter(c => c.type === type));
+    if (near) out.push({ type, center: near.item, km: near.km, reason });
+  }
+  return out;
+}
+
 /** Center types that receive welfare-check alerts. */
 export const RESPONDER_TYPES = ['police', 'fire', 'hospital'] as const;

@@ -42,6 +42,10 @@ export interface Zone {
   source: string;
   updatedAt: Date;
   researchStatus: string;
+  /** Monitor agent: warning + safety instructions for people in the zone. */
+  safetyWarning: string;
+  safetyAdvice: string[];
+  adviceSource: string;
 }
 
 export interface News {
@@ -89,6 +93,11 @@ export interface Case {
   viaMesh: boolean;
   meshHops: number;
   relayedBy: string;
+  /** Triage agent: likely needs. Dispatch agent: whether services were contacted, and the message. */
+  needs: string[];
+  dispatched: boolean;
+  dispatchMessage: string;
+  dispatchSource: string;
   openedAt: Date;
 }
 
@@ -112,6 +121,8 @@ export interface Alert {
   caseId: string;
   centerId: number;
   message: string;
+  /** 'nearest' (scan) | 'dispatch' (Dispatch agent) | 'insurer' */
+  role: string;
   status: string;
   at: Date;
 }

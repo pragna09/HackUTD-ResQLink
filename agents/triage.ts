@@ -3,7 +3,8 @@
 // Batches up to 10 cases per model call to stay inside free-tier limits.
 import { z } from 'zod';
 import { llm, type LlmClient, type Source } from './llm';
-import type { CaseRow, ZoneRow } from './types';
+import { NEEDS, type Need } from '../module/src/logic';
+import type { CaseRow, PersonRow, ZoneRow } from './types';
 
 export const TRIAGE_BATCH = 10;
 
@@ -13,6 +14,7 @@ export const TriageSchema = z.object({
       z.object({
         caseId: z.string().describe('The case id exactly as given'),
         reason: z.string().min(10).max(300).describe('One sentence for a responder'),
+        needs: z.array(z.enum(NEEDS)).max(4).default([]).describe('What help they likely need: medical, rescue, evacuation, security'),
       })
     )
     .min(1),
@@ -35,11 +37,16 @@ export type TriageCase = Pick<
   | 'sosNote'
   | 'viaMesh'
   | 'meshHops'
->;
+> & {
+  /** Household from the phone app, when the person signed in. */
+  person?: PersonRow;
+};
 
 export interface TriageOutput {
   caseId: bigint;
   rationale: string;
+  /** Fed to the Dispatch agent. */
+  needs: Need[];
   source: Source;
 }
 
@@ -48,6 +55,8 @@ const SYSTEM = [
   'For each case write ONE plain sentence telling a responder why this person needs a welfare check now.',
   'Use only the facts given. Do not invent medical conditions. Do not restate or change the score.',
   'Never say "confirmed emergency": a silent phone may only mean a dead battery or lost signal.',
+  'Refer to people by name or as "they"; never guess gender from a name.',
+  'Also tag what help each person likely needs (medical, rescue, evacuation, security) from the facts only: e.g. elderly dependents or accessibility needs suggest medical; trapped or SOS suggests rescue.',
   'If a case says the person sent an SOS, lead with that: they asked for help, possibly relayed phone-to-phone because they had no signal. Do not mention hop counts.',
 ].join(' ');
 
@@ -59,9 +68,21 @@ export function triagePrompt(cases: TriageCase[], zone: Pick<ZoneRow, 'name' | '
       `vulnerable ${c.vulnerabilityFlag ? 'yes' : 'no'}; pets ${c.hasPets ? 'yes' : 'no'}; ` +
       `urgency ${c.urgencyScore.toFixed(1)}/100 (severity ${c.scoreSeverity}, silence ${c.scoreSilence}, vulnerability ${c.scoreVulnerability}); ` +
       `nearest center ${c.centerDistanceKm >= 0 ? `${c.centerDistanceKm.toFixed(1)} km` : 'unknown'}` +
+      (c.person
+        ? `; household ${c.person.dependentsChildren} children, ${c.person.dependentsElderly} elderly, accessibility needs ${c.person.needsAccessible ? 'yes' : 'no'}${c.person.checkInStatus ? `, check-in answer "${c.person.checkInStatus}"` : ''}`
+        : '') +
       (c.sos ? `; SENT AN SOS${c.viaMesh ? ' with no signal, relayed phone-to-phone' : ''}${c.sosNote ? `, message: "${c.sosNote}"` : ''}` : '')
   );
-  return `${z}\n\nCases:\n${lines.join('\n')}\n\nReturn {"results":[{"caseId":"...","reason":"..."}]} with one entry per case.`;
+  return `${z}\n\nCases:\n${lines.join('\n')}\n\nReturn {"results":[{"caseId":"...","reason":"...","needs":["..."]}]} with one entry per case.`;
+}
+
+/** Deterministic need tags used when the model is unavailable. */
+export function fallbackNeeds(c: TriageCase, hazard = ''): Need[] {
+  const needs = new Set<Need>();
+  if (c.sos) needs.add('rescue');
+  if (c.person?.needsAccessible || (c.person?.dependentsElderly ?? 0) > 0 || (!c.person && c.vulnerabilityFlag)) needs.add('medical');
+  if (/flood|fire|surge|hurricane/i.test(hazard) && c.severity >= 4) needs.add('evacuation');
+  return [...needs];
 }
 
 /** Deterministic template used when the model is unavailable. */
@@ -92,14 +113,14 @@ export async function runTriage(
       system: SYSTEM,
       prompt: triagePrompt(batch, zone),
       schema: TriageSchema,
-      fallback: () => ({ results: batch.map(c => ({ caseId: String(c.id), reason: fallbackReason(c, hazard) })) }),
+      fallback: () => ({ results: batch.map(c => ({ caseId: String(c.id), reason: fallbackReason(c, hazard), needs: fallbackNeeds(c, hazard) })) }),
     });
-    const byId = new Map(res.data.results.map(r => [r.caseId, r.reason]));
+    const byId = new Map(res.data.results.map(r => [r.caseId, r]));
     for (const c of batch) {
-      const reason = byId.get(String(c.id));
-      // A case the model skipped gets the template, tagged honestly as fallback.
-      if (reason && res.source === 'llm') out.push({ caseId: c.id, rationale: reason, source: 'llm' });
-      else out.push({ caseId: c.id, rationale: reason ?? fallbackReason(c, hazard), source: reason ? res.source : 'fallback' });
+      const r = byId.get(String(c.id));
+      // A case the model skipped gets the templates, tagged honestly as fallback.
+      if (r && res.source === 'llm') out.push({ caseId: c.id, rationale: r.reason, needs: r.needs, source: 'llm' });
+      else out.push({ caseId: c.id, rationale: r?.reason ?? fallbackReason(c, hazard), needs: r?.needs ?? fallbackNeeds(c, hazard), source: r ? res.source : 'fallback' });
     }
   }
   return out;

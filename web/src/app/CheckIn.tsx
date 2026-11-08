@@ -163,6 +163,16 @@ export function CheckIn({ me, demoFix, show }: { me: Profile; demoFix: Loc | nul
             <p className="lede">
               {zone ? `${zone.name.replace(' (synthetic)', '')} is now severity ${zone.severity} of 5. ` : ''}Let responders know how you are.
             </p>
+            {zone && zone.safetyAdvice.length > 0 && (
+              <div className="advice">
+                <div className="advice-w">{zone.safetyWarning}</div>
+                <ol>
+                  {zone.safetyAdvice.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
             {answering === 'help' ? (
               <>
                 <label className="label" htmlFor="help-note">

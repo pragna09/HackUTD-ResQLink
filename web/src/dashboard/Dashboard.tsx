@@ -50,7 +50,7 @@ export function Dashboard() {
   };
   const listed = showResolved ? resolved : active;
   const pings = useMemo(() => [...data.pings.values()], [data.pings]);
-  const alertsByCase = useMemo(() => new Map(data.alerts.map(a => [a.caseId, a])), [data.alerts]);
+  const alertsByCase = useMemo(() => new Map(data.alerts.filter(a => a.role === 'nearest').map(a => [a.caseId, a])), [data.alerts]);
   const selected = zoneCases.find(c => c.id === selectedId) ?? null;
 
   // Keep a sensible selection as the queue changes.
@@ -206,6 +206,9 @@ export function Dashboard() {
             hasWifi={selected ? data.profiles.get(selected.user)?.hasWifi : undefined}
             profile={selected ? data.profiles.get(selected.user) : undefined}
             alert={selected ? alertsByCase.get(selected.id) : undefined}
+            caseAlerts={selected ? data.alerts.filter(a => a.caseId === selected.id && a.role !== 'nearest') : []}
+            centers={data.centers}
+            zone={selected ? data.zones.find(z => z.id === selected.zoneId) : undefined}
             center={data.centers.find(x => x.id === selected?.assignedCenter)}
             onAck={id => run('Alert acknowledged', () => api.acknowledgeAlert(id))}
           />
@@ -500,6 +503,19 @@ function ZonePanel({ zone, newsCount, loading }: { zone?: Zone; newsCount: numbe
             <p className="quote" style={{ marginTop: 10 }}>
               {zone.summary}
             </p>
+            {zone.safetyAdvice.length > 0 && (
+              <div className="advice">
+                <div className="advice-h">
+                  <b>Sent to people in the zone</b> <SourceBadge source={zone.adviceSource} title="Written by the Monitor agent" />
+                </div>
+                <div className="advice-w">{zone.safetyWarning}</div>
+                <ol>
+                  {zone.safetyAdvice.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
             {zone.evidence.length > 0 && (
               <ul className="evidence">
                 {zone.evidence.map((e, i) => (
@@ -514,8 +530,18 @@ function ZonePanel({ zone, newsCount, loading }: { zone?: Zone; newsCount: numbe
   );
 }
 
-function CaseDetail(props: { c: Case | null; hasWifi?: boolean; profile?: Profile; alert?: Alert; center?: Center; onAck: (id: string) => void }) {
-  const { c, hasWifi, profile, alert, center, onAck } = props;
+function CaseDetail(props: {
+  c: Case | null;
+  hasWifi?: boolean;
+  profile?: Profile;
+  alert?: Alert;
+  caseAlerts: Alert[];
+  centers: Center[];
+  zone?: Zone;
+  center?: Center;
+  onAck: (id: string) => void;
+}) {
+  const { c, hasWifi, profile, alert, caseAlerts, centers, zone, center, onAck } = props;
   if (!c)
     return (
       <section className="panel">
@@ -631,6 +657,8 @@ function CaseDetail(props: { c: Case | null; hasWifi?: boolean; profile?: Profil
           </div>
         )}
 
+        <AgentPipeline c={c} zone={zone} caseAlerts={caseAlerts} centers={centers} />
+
         <div className="section">
           <h3>Nearest center &amp; alert</h3>
           {center ? (
@@ -666,5 +694,67 @@ function CaseDetail(props: { c: Case | null; hasWifi?: boolean; profile?: Profil
 
       </div>
     </section>
+  );
+}
+
+/** The three agents' contributions to one case, in pipeline order. */
+function AgentPipeline({ c, zone, caseAlerts, centers }: { c: Case; zone?: Zone; caseAlerts: Alert[]; centers: Center[] }) {
+  const monitorDone = !!zone && zone.safetyAdvice.length > 0;
+  const triageDone = c.rationaleSource !== '';
+  const steps = [
+    {
+      name: 'Monitor',
+      done: monitorDone,
+      source: zone?.adviceSource ?? '',
+      body: monitorDone ? `Warned the zone: "${zone!.safetyWarning}"` : 'Writing safety advice for the zone…',
+    },
+    {
+      name: 'Triage',
+      done: triageDone,
+      source: c.rationaleSource,
+      body: triageDone ? (c.needs.length ? `Needs: ${c.needs.join(', ')}` : 'No specific needs flagged') : 'Assessing this case…',
+    },
+    {
+      name: 'Dispatch',
+      done: c.dispatched,
+      source: c.dispatchSource,
+      body: c.dispatched ? `Contacted ${caseAlerts.length} service${caseAlerts.length === 1 ? '' : 's'}` : triageDone ? 'Choosing services…' : 'Waiting for triage',
+    },
+  ];
+  return (
+    <div className="section">
+      <h3>Agent pipeline</h3>
+      <ol className="pipeline">
+        {steps.map(s => (
+          <li key={s.name} className={s.done ? 'done' : ''}>
+            <span className="dot" aria-hidden />
+            <div>
+              <b>{s.name}</b> {s.done && <SourceBadge source={s.source} />}
+              <div className="small muted">{s.body}</div>
+            </div>
+          </li>
+        ))}
+      </ol>
+      {c.dispatched && (
+        <>
+          <ul className="dispatch-list">
+            {caseAlerts.map(a => {
+              const ctr = centers.find(x => x.id === a.centerId);
+              return (
+                <li key={a.id}>
+                  <span className={`chip ${a.role === 'insurer' ? 'info' : 'warn'}`}>{ctr?.type ?? a.role}</span> {ctr?.name ?? `center ${a.centerId}`}
+                  <span className={`chip ${a.status === 'acknowledged' ? 'ok' : ''}`} style={{ marginLeft: 'auto' }}>
+                    {a.status}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="quote" style={{ marginTop: 8 }}>
+            {c.dispatchMessage}
+          </p>
+        </>
+      )}
+    </div>
   );
 }

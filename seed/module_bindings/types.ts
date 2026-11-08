@@ -22,6 +22,7 @@ export const Alert = __t.object("Alert", {
   caseId: __t.u64(),
   centerId: __t.u32(),
   message: __t.string(),
+  role: __t.string(),
   status: __t.string(),
   timestamp: __t.timestamp(),
 });
@@ -95,6 +96,10 @@ export const MissingCase = __t.object("MissingCase", {
   viaMesh: __t.bool(),
   meshHops: __t.u32(),
   relayedBy: __t.string(),
+  needs: __t.array(__t.string()),
+  dispatched: __t.bool(),
+  dispatchMessage: __t.string(),
+  dispatchSource: __t.string(),
   openedAt: __t.timestamp(),
   updatedAt: __t.timestamp(),
 });
@@ -149,6 +154,9 @@ export const Zone = __t.object("Zone", {
   source: __t.string(),
   updatedAt: __t.timestamp(),
   researchStatus: __t.string(),
+  safetyWarning: __t.string(),
+  safetyAdvice: __t.array(__t.string()),
+  adviceSource: __t.string(),
 });
 export type Zone = __Infer<typeof Zone>;
 

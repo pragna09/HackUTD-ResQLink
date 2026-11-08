@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DbConnection } from './module_bindings';
 import { AGENTS_DIR, env } from './config';
-import type { CaseRow, NewsRow, ZoneRow } from './types';
+import type { CaseRow, CenterRow, NewsRow, PersonRow, ZoneRow } from './types';
 
 const TOKEN_FILE = resolve(AGENTS_DIR, '.token');
 
@@ -15,8 +15,10 @@ export interface Stdb {
   llmProvider(): string | undefined;
   news(area: string): NewsRow[];
   cases(): CaseRow[];
+  centers(): CenterRow[];
+  person(identityHex: string): PersonRow | undefined;
   /** Fires on any insert/update/delete in the named table. */
-  onChange(table: 'zone' | 'missing_case' | 'news_item' | 'agent_config', cb: () => void): void;
+  onChange(table: 'zone' | 'missing_case' | 'news_item' | 'agent_config' | 'alert', cb: () => void): void;
   upsertZone(a: {
     id: string;
     name: string;
@@ -30,7 +32,9 @@ export interface Stdb {
     evidence: string[];
     source: string;
   }): Promise<void>;
-  setRationale(a: { caseId: bigint; rationale: string; source: string }): Promise<void>;
+  setRationale(a: { caseId: bigint; rationale: string; source: string; needs: string[] }): Promise<void>;
+  setZoneAdvice(a: { zoneId: string; warning: string; instructions: string[]; source: string }): Promise<void>;
+  dispatchCase(a: { caseId: bigint; centerIds: number[]; message: string; source: string }): Promise<void>;
   identityHex: string;
 }
 
@@ -48,10 +52,16 @@ const toZone = (r: any): ZoneRow => ({
   evidence: [...r.evidence],
   source: r.source,
   researchStatus: r.researchStatus,
+  safetyWarning: r.safetyWarning,
+  safetyAdvice: [...r.safetyAdvice],
 });
 const toNews = (r: any): NewsRow => ({ id: r.id, area: r.area, text: r.text, timestampMs: r.timestamp.toDate().getTime() });
 const toCase = (r: any): CaseRow => ({
   id: r.id,
+  user: r.user.toHexString(),
+  rationaleSource: r.rationaleSource,
+  needs: [...r.needs],
+  dispatched: r.dispatched,
   zoneId: r.zoneId,
   displayName: r.displayName,
   silentMinutes: r.silentMinutes,
@@ -101,6 +111,9 @@ export function connectStdb(): Promise<Stdb> {
             'SELECT * FROM news_item',
             'SELECT * FROM missing_case',
             'SELECT * FROM agent_config',
+            'SELECT * FROM emergency_center',
+            'SELECT * FROM user_profile',
+            'SELECT * FROM alert',
           ]);
       })
       .onConnectError((_ctx, err) => {
@@ -127,6 +140,7 @@ function wrap(conn: DbConnection, identityHex: string): Stdb {
   watch('news_item', conn.db.newsItem);
   watch('missing_case', conn.db.missingCase);
   watch('agent_config', conn.db.agentConfig);
+  watch('alert', conn.db.alert);
 
   return {
     identityHex,
@@ -134,8 +148,17 @@ function wrap(conn: DbConnection, identityHex: string): Stdb {
     llmProvider: () => conn.db.agentConfig.id.find(0)?.llmProvider,
     news: area => [...conn.db.newsItem.iter()].filter(n => n.area === area).map(toNews),
     cases: () => [...conn.db.missingCase.iter()].map(toCase),
+    centers: () => [...conn.db.emergencyCenter.iter()].map(c => ({ id: c.id, type: c.type, name: c.name, lat: c.lat, lng: c.lng })),
+    person: hex => {
+      const p = [...conn.db.userProfile.iter()].find(x => x.identity.toHexString() === hex);
+      return p
+        ? { ageGroup: p.ageGroup, dependentsChildren: p.dependentsChildren, dependentsElderly: p.dependentsElderly, needsAccessible: p.needsAccessible, hasPets: p.hasPets, hasWifi: p.hasWifi, checkInStatus: p.checkInStatus }
+        : undefined;
+    },
     onChange: (t, cb) => void (listeners[t] ??= []).push(cb),
     upsertZone: a => conn.reducers.upsertZone(a),
     setRationale: a => conn.reducers.setRationale(a),
+    setZoneAdvice: a => conn.reducers.setZoneAdvice(a),
+    dispatchCase: a => conn.reducers.dispatchCase(a),
   };
 }

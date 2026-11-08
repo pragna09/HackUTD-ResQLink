@@ -26,6 +26,9 @@ function seed(): Snapshot {
   for (const { city: _city, ...z } of d.zones) s.zones.push({
     ...z,
     severity: 1,
+    safetyWarning: '',
+    safetyAdvice: [],
+    adviceSource: '',
     confidence: 0,
     summary: 'Not assessed yet. Run weather research or simulate a disaster.',
     evidence: [],
@@ -85,12 +88,12 @@ export function createMockBackend(): Backend {
         id: String(nextId++), user: lp.user, zoneId: zone.id, displayName: profile.displayName, ...fields,
         rationale: '', rationaleSource: '', status: 'open', assignedCenter: near?.item.id,
         centerDistanceKm: near ? Math.round(near.km * 100) / 100 : -1, openedAt: new Date(),
-        sos: false, sosNote: '', viaMesh: false, meshHops: 0, relayedBy: '',
+        sos: false, sosNote: '', viaMesh: false, meshHops: 0, relayedBy: '', needs: [], dispatched: false, dispatchMessage: '', dispatchSource: '',
       };
       data.cases.push(c);
       if (near) {
         data.alerts.push({
-          id: c.id, caseId: c.id, centerId: near.item.id, status: 'sent', at: new Date(),
+          id: c.id, caseId: c.id, centerId: near.item.id, role: 'nearest', status: 'sent', at: new Date(),
           message: welfareCheckMessage({ displayName: profile.displayName, silentMinutes: silent, zoneName: zone.name, centerName: near.item.name, centerKm: near.km }),
         });
       }
@@ -226,13 +229,13 @@ export function createMockBackend(): Backend {
                 silentMinutes: Math.round(silent * 10) / 10, severity: zone.severity, vulnerabilityFlag: profile.vulnerabilityFlag, hasPets: profile.hasPets,
                 scoreSeverity: s.severityPart, scoreSilence: s.silencePart, scoreVulnerability: s.vulnerabilityPart, urgencyScore: s.total,
                 lastLat: m.lat, lastLng: m.lng, lastSeen: new Date(m.createdAtMs), rationale: '', rationaleSource: '', status: 'open',
-                assignedCenter: near?.item.id, centerDistanceKm: near ? Math.round(near.km * 100) / 100 : -1, openedAt: new Date(), ...mesh,
+                assignedCenter: near?.item.id, centerDistanceKm: near ? Math.round(near.km * 100) / 100 : -1, openedAt: new Date(), needs: [], dispatched: false, dispatchMessage: '', dispatchSource: '', ...mesh,
               };
               data.cases.push(c);
               caseId = c.id;
               if (near) {
                 data.alerts.push({
-                  id: c.id, caseId: c.id, centerId: near.item.id, status: 'sent', at: new Date(),
+                  id: c.id, caseId: c.id, centerId: near.item.id, role: 'nearest', status: 'sent', at: new Date(),
                   message: meshSosMessage({ displayName: profile.displayName, minutesAgo: silent, hops, relayedBy, note: m.note, zoneName: zone.name, centerName: near.item.name, centerKm: near.km }),
                 });
               }

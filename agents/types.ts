@@ -15,6 +15,9 @@ export interface ZoneRow {
   evidence: string[];
   source: string;
   researchStatus: string;
+  /** Monitor agent output ('' / [] until written). */
+  safetyWarning?: string;
+  safetyAdvice?: string[];
 }
 
 export interface NewsRow {
@@ -26,6 +29,8 @@ export interface NewsRow {
 
 export interface CaseRow {
   id: bigint;
+  /** Person's identity (hex), to look up their household. */
+  user?: string;
   zoneId: string;
   displayName: string;
   silentMinutes: number;
@@ -47,6 +52,22 @@ export interface CaseRow {
   sosNote?: string;
   viaMesh?: boolean;
   meshHops?: number;
+  /** Triage agent output. */
+  rationaleSource?: string;
+  needs?: string[];
+  /** Dispatch agent output. */
+  dispatched?: boolean;
+}
+
+/** Household details from the phone app, used by Triage. */
+export interface PersonRow {
+  ageGroup: string;
+  dependentsChildren: number;
+  dependentsElderly: number;
+  needsAccessible: boolean;
+  hasPets: boolean;
+  hasWifi: boolean;
+  checkInStatus: string;
 }
 
 export interface CenterRow {

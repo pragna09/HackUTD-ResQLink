@@ -44,7 +44,8 @@ export interface SeedUser {
 
 export interface SeedCenter {
   id: number;
-  type: 'police' | 'fire' | 'hospital';
+  /** 'insurer' is never picked as the nearest responder; the Dispatch agent copies it on every case. */
+  type: 'police' | 'fire' | 'hospital' | 'insurer';
   name: string;
   lat: number;
   lng: number;
@@ -160,16 +161,19 @@ const CENTER_SPECS: Record<string, Array<{ type: SeedCenter['type']; name: strin
     { type: 'police', name: 'Dallas Central Patrol Station (synthetic)', km: 2.5, bearing: 200 },
     { type: 'fire', name: 'Dallas Fire Station 18 (synthetic)', km: 3.5, bearing: 280 },
     { type: 'hospital', name: 'Trinity Medical Center (synthetic)', km: 4.0, bearing: 330 },
+    { type: 'insurer', name: 'Insurer Claims & Assistance Desk, Dallas (synthetic)', km: 1.5, bearing: 250 },
   ],
   'la-fire': [
     { type: 'police', name: 'LA Central Community Police Station (synthetic)', km: 2.0, bearing: 190 },
     { type: 'fire', name: 'LA Fire Station 9 (synthetic)', km: 3.0, bearing: 260 },
     { type: 'hospital', name: 'Echo Park General Hospital (synthetic)', km: 3.5, bearing: 320 },
+    { type: 'insurer', name: 'Insurer Claims & Assistance Desk, Los Angeles (synthetic)', km: 1.5, bearing: 230 },
   ],
   'miami-flood': [
     { type: 'police', name: 'Little Havana Police District (synthetic)', km: 2.0, bearing: 240 },
     { type: 'fire', name: 'Miami Fire Station 5 (synthetic)', km: 2.5, bearing: 290 },
     { type: 'hospital', name: 'Biscayne Regional Hospital (synthetic)', km: 3.0, bearing: 330 },
+    { type: 'insurer', name: 'Insurer Claims & Assistance Desk, Miami (synthetic)', km: 1.5, bearing: 210 },
   ],
 };
 

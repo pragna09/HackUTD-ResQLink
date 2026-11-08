@@ -83,6 +83,11 @@ export const zone = table(
     updatedAt: t.timestamp(),
     /** 'idle' | 'requested'. The dashboard button sets 'requested'; the Weather agent clears it. */
     researchStatus: t.string(),
+    // Monitor agent output for people in the zone. Cleared whenever the zone is re-rated, then regenerated.
+    safetyWarning: t.string(),
+    safetyAdvice: t.array(t.string()),
+    /** '' until written, then 'llm' | 'fallback' */
+    adviceSource: t.string(),
   }
 );
 
@@ -132,6 +137,13 @@ export const missingCase = table(
     viaMesh: t.bool(),
     meshHops: t.u32(),
     relayedBy: t.string(),
+    // Triage agent: what the person likely needs ('medical' | 'rescue' | 'evacuation' | 'security').
+    needs: t.array(t.string()),
+    // Dispatch agent: services contacted beyond the nearest center, and the message they received.
+    dispatched: t.bool(),
+    dispatchMessage: t.string(),
+    /** '' until dispatched, then 'llm' | 'fallback' */
+    dispatchSource: t.string(),
     openedAt: t.timestamp(),
     updatedAt: t.timestamp(),
   }
@@ -144,6 +156,8 @@ export const alert = table(
     caseId: t.u64().index('btree'),
     centerId: t.u32(),
     message: t.string(),
+    /** 'nearest' (sent by the scan) | 'dispatch' (a service picked by the Dispatch agent) | 'insurer' */
+    role: t.string(),
     /** 'sent' | 'acknowledged' */
     status: t.string(),
     timestamp: t.timestamp(),

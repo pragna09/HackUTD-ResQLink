@@ -36,6 +36,7 @@ import {
 // Import all reducer arg schemas
 import AcknowledgeAlertReducer from "./acknowledge_alert_reducer";
 import CreateNewsItemReducer from "./create_news_item_reducer";
+import DispatchCaseReducer from "./dispatch_case_reducer";
 import PingReducer from "./ping_reducer";
 import RelayMeshMessagesReducer from "./relay_mesh_messages_reducer";
 import RequestResearchReducer from "./request_research_reducer";
@@ -43,6 +44,7 @@ import ResetDemoReducer from "./reset_demo_reducer";
 import RespondCheckInReducer from "./respond_check_in_reducer";
 import SetLlmProviderReducer from "./set_llm_provider_reducer";
 import SetRationaleReducer from "./set_rationale_reducer";
+import SetZoneAdviceReducer from "./set_zone_advice_reducer";
 import SilenceUsersReducer from "./silence_users_reducer";
 import SimulateDisasterReducer from "./simulate_disaster_reducer";
 import UpdateProfileReducer from "./update_profile_reducer";
@@ -182,6 +184,7 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("acknowledge_alert", AcknowledgeAlertReducer),
   __reducerSchema("create_news_item", CreateNewsItemReducer),
+  __reducerSchema("dispatch_case", DispatchCaseReducer),
   __reducerSchema("ping", PingReducer),
   __reducerSchema("relay_mesh_messages", RelayMeshMessagesReducer),
   __reducerSchema("request_research", RequestResearchReducer),
@@ -189,6 +192,7 @@ const reducersSchema = __reducers(
   __reducerSchema("respond_check_in", RespondCheckInReducer),
   __reducerSchema("set_llm_provider", SetLlmProviderReducer),
   __reducerSchema("set_rationale", SetRationaleReducer),
+  __reducerSchema("set_zone_advice", SetZoneAdviceReducer),
   __reducerSchema("silence_users", SilenceUsersReducer),
   __reducerSchema("simulate_disaster", SimulateDisasterReducer),
   __reducerSchema("update_profile", UpdateProfileReducer),

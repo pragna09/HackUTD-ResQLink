@@ -24,4 +24,7 @@ export default __t.row({
   source: __t.string(),
   updatedAt: __t.timestamp().name("updated_at"),
   researchStatus: __t.string().name("research_status"),
+  safetyWarning: __t.string().name("safety_warning"),
+  safetyAdvice: __t.array(__t.string()).name("safety_advice"),
+  adviceSource: __t.string().name("advice_source"),
 });

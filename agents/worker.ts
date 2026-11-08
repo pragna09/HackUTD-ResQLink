@@ -1,11 +1,16 @@
-// Agents worker: connects to SpacetimeDB as a client and runs the three agents.
-//   Weather Research: on a timer (WEATHER_INTERVAL_MIN) and whenever a zone's researchStatus = 'requested'.
-//   Triage:           for every open case with an empty rationale (batched).
+// Agents worker: connects to SpacetimeDB as a client and runs the agent pipeline.
+//   Weather research: on a timer (WEATHER_INTERVAL_MIN) and whenever a zone's researchStatus = 'requested'.
+//   1. Monitor:  a zone at severity >= 3 without advice -> warning + safety instructions for people in it.
+//   2. Triage:   every open case with no reason yet -> reason + needs (batched per zone).
+//   3. Dispatch: every triaged, undispatched case -> services by disaster + needs, message, alerts + insurer.
+// All three use whichever model the dashboard picker selects.
 // Run: npm run dev   (in /agents)
 import { env } from './config';
 import { getActiveProvider, isProvider, llm, llmFor, setActiveProvider } from './llm';
 import { fetchActiveAlerts } from './nws';
 import { connectStdb, type Stdb } from './stdb';
+import { runDispatch } from './dispatch';
+import { runMonitor } from './monitor';
 import { runTriage } from './triage';
 import { runWeatherResearch } from './weather';
 import type { ZoneRow } from './types';
@@ -60,12 +65,28 @@ async function main() {
   const checkRequests = () => db.zones().filter(z => z.researchStatus === 'requested').forEach(research);
   db.onChange('zone', checkRequests);
   checkRequests();
+
+  // ---- 1. Monitor ----------------------------------------------------------------------------
+  const monitorBusy = new Set<string>();
+  const monitor = () => {
+    for (const z of db.zones()) {
+      if (z.severity < 3 || (z.safetyAdvice?.length ?? 0) > 0 || monitorBusy.has(z.id)) continue;
+      monitorBusy.add(z.id);
+      runMonitor(z, db.news(z.id))
+        .then(res => db.setZoneAdvice({ zoneId: z.id, warning: res.data.warning, instructions: res.data.instructions, source: res.source }).then(() => res))
+        .then(res => console.log(`[monitor] ${z.id}: "${res.data.warning}" + ${res.data.instructions.length} instructions (${res.source})`))
+        .catch(e => console.error(`[monitor] ${z.id} failed:`, e))
+        .finally(() => monitorBusy.delete(z.id));
+    }
+  };
+  db.onChange('zone', monitor);
+  monitor();
   setInterval(() => {
     // Respect an operator's demo override: the timer never overwrites a 'simulated' zone.
     db.zones().filter(z => z.source !== 'simulated').forEach(research);
   }, env.WEATHER_INTERVAL_MIN * 60_000);
 
-  // ---- Triage --------------------------------------------------------------------------------
+  // ---- 2. Triage --------------------------------------------------------------------------------
   // Keyed by id + SOS state: a case that later becomes an SOS (mesh relay) gets a fresh reason.
   const triaged = new Set<string>();
   const triageKey = (c: { id: bigint; sos?: boolean }) => `${c.id}${c.sos ? ':sos' : ''}`;
@@ -86,7 +107,8 @@ async function main() {
         for (const c of pending) (byZone.get(c.zoneId) ?? byZone.set(c.zoneId, []).get(c.zoneId)!).push(c);
         for (const [zoneId, cases] of byZone) {
           cases.forEach(c => triaged.add(triageKey(c)));
-          const results = await runTriage(cases, zones.get(zoneId));
+          const withHousehold = cases.map(c => ({ ...c, person: c.user ? db.person(c.user) : undefined }));
+          const results = await runTriage(withHousehold, zones.get(zoneId));
           for (const r of results) {
             await db.setRationale(r).catch(e => console.error(`[triage] case ${r.caseId}:`, e));
           }
@@ -98,11 +120,38 @@ async function main() {
     }
   };
 
+  // ---- 3. Dispatch --------------------------------------------------------------------------
+  const dispatchTried = new Set<string>();
+  let dispatchRunning = false;
+  const dispatch = async () => {
+    if (dispatchRunning) return;
+    dispatchRunning = true;
+    try {
+      const zones = new Map(db.zones().map(z => [z.id, z]));
+      const centers = db.centers();
+      const ready = db
+        .cases()
+        .filter(c => c.status !== 'resolved' && c.rationale !== '' && !c.dispatched && !dispatchTried.has(`${c.id}:${c.rationale}`))
+        .sort((a, b) => Number(b.sos ?? false) - Number(a.sos ?? false) || b.urgencyScore - a.urgencyScore);
+      for (const c of ready) {
+        dispatchTried.add(`${c.id}:${c.rationale}`);
+        const d = await runDispatch(c, zones.get(c.zoneId), centers, c.user ? db.person(c.user) : undefined);
+        await db
+          .dispatchCase({ caseId: d.caseId, centerIds: d.centerIds, message: d.message, source: d.source })
+          .then(() => console.log(`[dispatch] case ${c.id} -> ${d.targets.map(t => t.type).join(', ')} (${d.source})`))
+          .catch(e => console.error(`[dispatch] case ${c.id}:`, e));
+      }
+    } finally {
+      dispatchRunning = false;
+    }
+  };
+
   let debounce: NodeJS.Timeout | undefined;
   const kick = () => {
     clearTimeout(debounce);
     debounce = setTimeout(() => {
-      void triage();
+      // The pipeline: triage writes reasons + needs, then dispatch acts on them.
+      void triage().then(dispatch);
     }, 1500);
   };
   db.onChange('missing_case', kick);

@@ -36,6 +36,10 @@ export default __t.row({
   viaMesh: __t.bool().name("via_mesh"),
   meshHops: __t.u32().name("mesh_hops"),
   relayedBy: __t.string().name("relayed_by"),
+  needs: __t.array(__t.string()),
+  dispatched: __t.bool(),
+  dispatchMessage: __t.string().name("dispatch_message"),
+  dispatchSource: __t.string().name("dispatch_source"),
   openedAt: __t.timestamp().name("opened_at"),
   updatedAt: __t.timestamp().name("updated_at"),
 });

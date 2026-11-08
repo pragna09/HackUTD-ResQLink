@@ -11,7 +11,9 @@ import {
   isInsideZone,
   helpRequestMessage,
   isVulnerable,
+  mandatoryServices,
   meshSosMessage,
+  NEEDS,
   minutesBetweenMicros,
   nearest,
   urgencyScore,
@@ -25,6 +27,8 @@ const SOURCES = new Set(['llm', 'fallback']);
 
 /** Mesh fields for a location that arrived directly from the phone. */
 const DIRECT = { viaMesh: false, meshHops: 0, relayedBy: '' };
+/** A zone that has just been (re-)rated has no Monitor advice yet. */
+const NO_ADVICE = { safetyWarning: '', safetyAdvice: [] as string[], adviceSource: '' };
 
 const isLat = (v: number) => Number.isFinite(v) && v >= -90 && v <= 90;
 const isLng = (v: number) => Number.isFinite(v) && v >= -180 && v <= 180;
@@ -147,6 +151,7 @@ export function upsertZone(
     source: a.source,
     updatedAt: ctx.timestamp,
     researchStatus: 'idle',
+    ...NO_ADVICE,
   };
   if (ctx.db.zone.id.find(a.id)) ctx.db.zone.id.update(row);
   else ctx.db.zone.insert(row);
@@ -160,15 +165,17 @@ export function requestResearch(ctx: Ctx, a: { zoneId: string }) {
   ctx.db.zone.id.update({ ...z, researchStatus: 'requested' });
 }
 
-export function setRationale(ctx: Ctx, a: { caseId: bigint; rationale: string; source: string }) {
+export function setRationale(ctx: Ctx, a: { caseId: bigint; rationale: string; source: string; needs?: string[] }) {
   if (!SOURCES.has(a.source)) throw new SenderError('source must be llm or fallback');
   const c = ctx.db.missingCase.id.find(a.caseId);
   if (!c) throw new SenderError('Unknown case');
-  // The agent writes text only. Score fields are untouched.
+  // The agent writes text and need tags only. Score fields are untouched.
+  const needs = [...new Set((a.needs ?? []).filter(n => (NEEDS as readonly string[]).includes(n)))];
   ctx.db.missingCase.id.update({
     ...c,
     rationale: a.rationale.trim().slice(0, 400),
     rationaleSource: a.source,
+    needs,
     updatedAt: ctx.timestamp,
   });
 }
@@ -274,6 +281,7 @@ function openCase(
     viaMesh: a.lp.viaMesh,
     meshHops: a.lp.meshHops,
     relayedBy: a.lp.relayedBy,
+    needs: [] as string[], dispatched: false, dispatchMessage: '', dispatchSource: '',
     openedAt: ctx.timestamp,
     updatedAt: ctx.timestamp,
   });
@@ -302,6 +310,7 @@ function openCase(
             centerName: near.item.name,
             centerKm: near.km,
           }),
+      role: 'nearest',
       status: 'sent',
       timestamp: ctx.timestamp,
     });
@@ -358,6 +367,60 @@ export function runScan(ctx: Ctx): ScanResult {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Agent pipeline: Monitor -> Triage -> Dispatch
+// ---------------------------------------------------------------------------------------------
+
+/** Monitor agent: warning + safety instructions for everyone in a zone (shown in the phone check-in). */
+export function setZoneAdvice(ctx: Ctx, a: { zoneId: string; warning: string; instructions: string[]; source: string }) {
+  if (!SOURCES.has(a.source)) throw new SenderError('source must be llm or fallback');
+  const z = ctx.db.zone.id.find(a.zoneId);
+  if (!z) throw new SenderError('Unknown zone');
+  const instructions = a.instructions.map(s => s.trim().slice(0, 160)).filter(Boolean).slice(0, 5);
+  if (instructions.length === 0) throw new SenderError('At least one safety instruction is required');
+  ctx.db.zone.id.update({ ...z, safetyWarning: a.warning.trim().slice(0, 200), safetyAdvice: instructions, adviceSource: a.source });
+}
+
+/**
+ * Dispatch agent: alert the chosen services and the insurer with one written message.
+ * The module re-checks the plan: every service type the disaster requires must be covered (agents may add,
+ * never drop), centers already alerted for this case are skipped, and a case is dispatched once.
+ */
+export function dispatchCase(ctx: Ctx, a: { caseId: bigint; centerIds: number[]; message: string; source: string }) {
+  if (!SOURCES.has(a.source)) throw new SenderError('source must be llm or fallback');
+  const c = ctx.db.missingCase.id.find(a.caseId);
+  if (!c) throw new SenderError('Unknown case');
+  if (c.status === 'resolved') throw new SenderError('Case is resolved');
+  if (c.dispatched) throw new SenderError('Case already dispatched');
+  const message = a.message.trim().slice(0, 700);
+  if (!message) throw new SenderError('Dispatch message is required');
+  const ids = [...new Set(a.centerIds)].slice(0, 8);
+  const centers = ids.map(id => ctx.db.emergencyCenter.id.find(id));
+  if (centers.some(x => !x)) throw new SenderError('Unknown center');
+  const chosen = centers as NonNullable<(typeof centers)[number]>[];
+
+  const zone = ctx.db.zone.id.find(c.zoneId);
+  const alerted = new Set([...ctx.db.alert.caseId.filter(c.id)].map(al => al.centerId));
+  const alertedTypes = new Set([...alerted].map(id => ctx.db.emergencyCenter.id.find(id)?.type));
+  for (const t of mandatoryServices(zone?.hazard ?? '')) {
+    if (!chosen.some(x => x.type === t) && !alertedTypes.has(t)) throw new SenderError(`Dispatch must include a ${t} service for this disaster`);
+  }
+
+  for (const center of chosen) {
+    if (alerted.has(center.id)) continue;
+    ctx.db.alert.insert({
+      id: 0n,
+      caseId: c.id,
+      centerId: center.id,
+      message,
+      role: center.type === 'insurer' ? 'insurer' : 'dispatch',
+      status: 'sent',
+      timestamp: ctx.timestamp,
+    });
+  }
+  ctx.db.missingCase.id.update({ ...c, dispatched: true, dispatchMessage: message, dispatchSource: a.source, updatedAt: ctx.timestamp });
+}
+
+// ---------------------------------------------------------------------------------------------
 // "Are you safe?" check-in from the phone app
 // ---------------------------------------------------------------------------------------------
 
@@ -406,6 +469,7 @@ export function respondCheckIn(
       sosNote: note,
       rationale: active.sos ? active.rationale : '',
       rationaleSource: active.sos ? active.rationaleSource : '',
+      dispatched: active.sos ? active.dispatched : false,
       status: 'open',
       updatedAt: ctx.timestamp,
     });
@@ -523,6 +587,7 @@ export function relayMeshMessages(ctx: Ctx, a: { payload: string }): RelayResult
           lastLng: m.lng,
           rationale: active.sos ? active.rationale : '',
           rationaleSource: active.sos ? active.rationaleSource : '',
+          dispatched: active.sos ? active.dispatched : false,
           status: 'open',
           updatedAt: ctx.timestamp,
         });
@@ -581,6 +646,7 @@ export function simulateDisaster(ctx: Ctx, a: { zoneId: string; severity: number
     evidence: ['Manual demo override from the dashboard (simulate_disaster).'],
     source: 'simulated',
     updatedAt: ctx.timestamp,
+    ...NO_ADVICE,
   });
   return runScan(ctx);
 }
@@ -637,6 +703,7 @@ export function loadSeed(ctx: Ctx) {
       source: 'seed',
       updatedAt: ctx.timestamp,
       researchStatus: 'idle',
+      ...NO_ADVICE,
     });
   }
   for (const n of data.news) {

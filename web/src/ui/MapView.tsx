@@ -105,7 +105,7 @@ export function MapView({ zones, focusZone, meshOverlay, meshPath, cases, pings,
     if (!g) return;
     g.clearLayers();
     for (const c of centers) {
-      const letter = c.type === 'hospital' ? 'H' : c.type === 'fire' ? 'F' : 'P';
+      const letter = c.type === 'hospital' ? 'H' : c.type === 'fire' ? 'F' : c.type === 'insurer' ? 'I' : 'P';
       L.marker([c.lat, c.lng], { icon: L.divIcon({ className: '', html: `<div class="mk-center">${letter}</div>`, iconSize: [20, 20] }) })
         .bindTooltip(`${c.name} (${c.type})`)
         .addTo(g);

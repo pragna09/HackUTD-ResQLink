@@ -14,4 +14,5 @@ export default {
   caseId: __t.u64(),
   rationale: __t.string(),
   source: __t.string(),
+  needs: __t.array(__t.string()),
 };

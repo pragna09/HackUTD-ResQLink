@@ -21,7 +21,11 @@ const URI = (() => {
   }
 })();
 const DB = import.meta.env.VITE_STDB_DB ?? 'welfare-check';
-const TOKEN_KEY = 'welfare-check.token';
+/**
+ * Saved identity. SpacetimeDB allows one live connection per identity, so the phone app (/app, including the
+ * dashboard's "Show phone" frame) keeps its own: otherwise the dashboard and the phone keep disconnecting each other.
+ */
+const TOKEN_KEY = window.location.pathname.startsWith('/app') ? 'welfare-check.phone-token' : 'welfare-check.token';
 
 const readToken = () => {
   try {
@@ -64,7 +68,7 @@ function readSnapshot(conn: any): Snapshot {
     });
   for (const r of conn.db.locationPing.iter())
     s.pings.set(hex(r.user), { user: hex(r.user), lat: r.lat, lng: r.lng, accuracy: r.accuracy, at: date(r.timestamp) });
-  for (const r of conn.db.zone.iter()) s.zones.push({ ...r, evidence: [...r.evidence], updatedAt: date(r.updatedAt) });
+  for (const r of conn.db.zone.iter()) s.zones.push({ ...r, evidence: [...r.evidence], safetyAdvice: [...r.safetyAdvice], updatedAt: date(r.updatedAt) });
   for (const r of conn.db.newsItem.iter())
     s.news.push({ id: String(r.id), area: r.area, text: r.text, at: date(r.timestamp), isSynthetic: r.isSynthetic });
   for (const r of conn.db.emergencyCenter.iter()) s.centers.push({ ...r });
@@ -78,7 +82,7 @@ function readSnapshot(conn: any): Snapshot {
       assignedCenter: r.assignedCenter ?? undefined,
     });
   for (const r of conn.db.alert.iter())
-    s.alerts.push({ id: String(r.id), caseId: String(r.caseId), centerId: r.centerId, message: r.message, status: r.status, at: date(r.timestamp) });
+    s.alerts.push({ id: String(r.id), caseId: String(r.caseId), centerId: r.centerId, message: r.message, role: r.role, status: r.status, at: date(r.timestamp) });
   for (const r of conn.db.meshMessage.iter())
     s.meshMessages.push({
       id: r.id,

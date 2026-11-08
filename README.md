@@ -8,6 +8,8 @@ and tells the **nearest emergency center**.
 
 - **Are you safe?** When someone's area becomes a disaster zone and their phone has signal, the app asks
   *"Are you safe, or do you need help?"* "I need help" alerts the nearest center right away.
+- **Three AI agents in a pipeline:** Monitor warns everyone in the zone with safety steps → Triage explains each case
+  and tags what the person needs → Dispatch contacts the right services for the disaster plus the insurer.
 - **No signal?** A phone-to-phone mesh relays SOS messages to the nearest phone that still has internet, which
   uploads them. See [docs/MESH.md](docs/MESH.md).
 
@@ -99,6 +101,21 @@ A blue banner marks preview mode: a local mock built from the same seed and scor
 5. **Simulate mesh (no signal)**: towers in the zone go down; SOS messages hop phone-to-phone on the map to phones with
    signal, then appear as SOS cases tagged **via mesh**, with the route on the map.
 6. **Reset** to run it again.
+
+## Agent pipeline
+
+One model (Gemini or NVIDIA Nemotron, picked on the dashboard) runs three agents, each feeding the next:
+
+| Agent | Trigger | Writes |
+|---|---|---|
+| **Monitor** (`agents/monitor.ts`) | a zone reaches severity 3+ | a warning + 3–5 safety instructions, shown in the zone panel and the phone's "Are you safe?" prompt |
+| **Triage** (`agents/triage.ts`) | a new or newly-SOS case | a one-line reason + needs (medical, rescue, evacuation, security) from the household, SOS note and check-in answer |
+| **Dispatch** (`agents/dispatch.ts`) | a triaged case | which services to contact and one dispatch message, sent to each service and the insurer claims desk |
+
+Code keeps control where it matters: it ranks the queue, and it decides the services every case in a disaster must reach
+(flood / earthquake / fire → fire & rescue + hospital). Dispatch may add services but never remove one, and the module
+re-checks before sending. Every agent has a template fallback, so the demo works without a model. Each case shows the
+three steps in an **Agent pipeline** panel.
 
 ## Urgency score
 

@@ -65,7 +65,7 @@ export const upsertZone = spacetimedb.reducer(
 export const requestResearch = spacetimedb.reducer({ zoneId: t.string() }, (ctx, args) => h.requestResearch(ctx, args));
 
 export const setRationale = spacetimedb.reducer(
-  { caseId: t.u64(), rationale: t.string(), source: t.string() },
+  { caseId: t.u64(), rationale: t.string(), source: t.string(), needs: t.array(t.string()) },
   (ctx, args) => h.setRationale(ctx, args)
 );
 
@@ -78,6 +78,20 @@ export const setLlmProvider = spacetimedb.reducer({ provider: t.string() }, (ctx
 export const respondCheckIn = spacetimedb.reducer(
   { status: t.string(), note: t.string(), hasLocation: t.bool(), lat: t.f64(), lng: t.f64(), accuracy: t.f64() },
   (ctx, args) => h.respondCheckIn(ctx, args)
+);
+
+// Agent pipeline ------------------------------------------------------------------------------------
+
+/** Monitor agent: zone warning + safety instructions. */
+export const setZoneAdvice = spacetimedb.reducer(
+  { zoneId: t.string(), warning: t.string(), instructions: t.array(t.string()), source: t.string() },
+  (ctx, args) => h.setZoneAdvice(ctx, args)
+);
+
+/** Dispatch agent: alert the chosen services + insurer; the module enforces the services the disaster requires. */
+export const dispatchCase = spacetimedb.reducer(
+  { caseId: t.u64(), centerIds: t.array(t.u32()), message: t.string(), source: t.string() },
+  (ctx, args) => h.dispatchCase(ctx, args)
 );
 
 // Mesh relay ---------------------------------------------------------------------------------------
