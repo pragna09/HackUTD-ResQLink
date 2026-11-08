@@ -5,14 +5,22 @@ import { XMLParser } from "fast-xml-parser";
 const PLACE = "Richardson, TX";
 const LAT = 32.9483;
 const LON = -96.7299;
+const env = (globalThis as typeof globalThis & {
+  process?: { env?: Record<string, string | undefined> };
+}).process?.env ?? {};
 // Confirm the exact ID on the model's page (or via GET /v1/models, see below)
-const MODEL = process.env.NEMOTRON_MODEL ?? "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
-const FORCE = process.env.FORCE === "1"; // 1 = ask the model even if weather looks fine
+const MODEL = env.NEMOTRON_MODEL ?? "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
+const FORCE = env.FORCE === "1"; // 1 = ask the model even if weather looks fine
 const NEWS_RSS =
   `https://news.google.com/rss/search?q=${encodeURIComponent(PLACE + " weather")}&hl=en-US&gl=US&ceid=US:en`;
 
+const apiKey = env.NVIDIA_API_KEY?.trim().replace(/^(['"])(.*)\1$/, "$2");
+if (!apiKey) {
+  throw new Error("Set NVIDIA_API_KEY to a valid NVIDIA API key.");
+}
+
 const client = new OpenAI({
-  apiKey: process.env.NVIDIA_API_KEY,
+  apiKey,
   baseURL: "https://integrate.api.nvidia.com/v1",
 });
 
