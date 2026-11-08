@@ -7,6 +7,7 @@ export interface Profile {
   ageGroup: string;
   vulnerabilityFlag: boolean;
   hasPets: boolean;
+  hasWifi: boolean;
   optIn: boolean;
   isSynthetic: boolean;
   simSilent: boolean;

@@ -103,6 +103,7 @@ export const UserProfile = __t.object("UserProfile", {
   ageGroup: __t.string(),
   vulnerabilityFlag: __t.bool(),
   hasPets: __t.bool(),
+  hasWifi: __t.bool(),
   optIn: __t.bool(),
   isSynthetic: __t.bool(),
   simSilent: __t.bool(),

@@ -264,3 +264,4 @@ a { color: inherit; }
 .tile b { font-size: 16px; }
 .tile span { color: var(--ink-3); font-size: 13px; }
 @media (max-width: 720px) { .tiles { grid-template-columns: 1fr; } .home h1 { font-size: 30px; } }
+.controls select.simulate { font-weight: 600; cursor: pointer; }

@@ -1,24 +1,38 @@
-// Deterministic SYNTHETIC demo dataset. Every person, place, center, shelter and news item is invented.
-// Pure TypeScript with no SpacetimeDB imports, so the module (reset_demo / init), the /seed script
-// and tests all produce the same data.
+// Deterministic SYNTHETIC demo dataset: three disaster scenarios (Dallas earthquake, Los Angeles fire,
+// Miami flood), 10 people each. Every person, place, center, shelter and news item is invented.
+// Pure TypeScript with no SpacetimeDB imports, so the module (reset_demo / init), the /seed script,
+// the web preview backend and tests all produce the same data.
 
 export const SEED = 20261107;
 
 export interface SeedZone {
   id: string;
   name: string;
+  /** City label for the dashboard's "Simulate <hazard> in <city>" menu. Not stored in the zone table. */
+  city: string;
+  hazard: 'earthquake' | 'fire' | 'flood';
   centerLat: number;
   centerLng: number;
   radiusKm: number;
 }
 
+/**
+ * none   = far outside the zone, phone keeps heartbeating. Never gets a case.
+ * medium = inside the zone, silent 30–70 min, not vulnerable.
+ * high   = inside the zone, silent 90–120 min, vulnerable.
+ */
+export type RiskTier = 'none' | 'medium' | 'high';
+
 export interface SeedUser {
-  /** Index 0..199, turned into a synthetic Identity by the module. */
+  /** Index 0..29, turned into a synthetic Identity by the module. */
   index: number;
   displayName: string;
   ageGroup: '0-17' | '18-64' | '65+';
+  zoneId: string;
+  riskTier: RiskTier;
   vulnerabilityFlag: boolean;
   hasPets: boolean;
+  hasWifi: boolean;
   lat: number;
   lng: number;
   accuracy: number;
@@ -52,7 +66,7 @@ export interface SeedNews {
 }
 
 export interface SeedDataset {
-  zone: SeedZone;
+  zones: SeedZone[];
   users: SeedUser[];
   centers: SeedCenter[];
   shelters: SeedShelter[];
@@ -74,106 +88,175 @@ export function prng(seed: number): () => number {
 const KM_PER_DEG_LAT = 110.574;
 const kmPerDegLng = (lat: number) => 111.32 * Math.cos((lat * Math.PI) / 180);
 
-/** A point at distance `km` and bearing `angle` (radians) from a center, flat-earth approximation (fine at city scale). */
-function offset(lat: number, lng: number, km: number, angle: number) {
+/** A point `km` away on compass bearing `bearingDeg` (0 = north, 90 = east). Flat-earth, fine at city scale. */
+function offset(lat: number, lng: number, km: number, bearingDeg: number) {
+  const a = (bearingDeg * Math.PI) / 180;
   return {
-    lat: lat + (km * Math.cos(angle)) / KM_PER_DEG_LAT,
-    lng: lng + (km * Math.sin(angle)) / kmPerDegLng(lat),
+    lat: Math.round((lat + (km * Math.cos(a)) / KM_PER_DEG_LAT) * 1e6) / 1e6,
+    lng: Math.round((lng + (km * Math.sin(a)) / kmPerDegLng(lat)) * 1e6) / 1e6,
   };
 }
 
-const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+export const ZONES: readonly SeedZone[] = [
+  { id: 'dallas-earthquake', name: 'Dallas Earthquake Zone (synthetic)', city: 'Dallas', hazard: 'earthquake', centerLat: 32.7767, centerLng: -96.797, radiusKm: 8 },
+  { id: 'la-fire', name: 'Los Angeles Fire Zone (synthetic)', city: 'Los Angeles', hazard: 'fire', centerLat: 34.0522, centerLng: -118.2437, radiusKm: 6 },
+  { id: 'miami-flood', name: 'Miami Flood Zone (synthetic)', city: 'Miami', hazard: 'flood', centerLat: 25.7617, centerLng: -80.1918, radiusKm: 5 },
+];
 
-export const DEMO_ZONE: SeedZone = {
-  id: 'trinity-bottoms',
-  name: 'Trinity Bottoms Flood Zone (synthetic)',
-  centerLat: 32.7705,
-  centerLng: -96.8265,
-  radiusKm: 4,
+/** Default zone for pages that show a single area (/app demo location, /volunteer map). */
+export const DEMO_ZONE: SeedZone = ZONES[0];
+
+// People: 4 none, 3 medium, 3 high per zone. In each zone one high-risk person has Wi-Fi and one does not.
+// Positions use western bearings (190°–340°) so Miami points stay on land, not in Biscayne Bay.
+interface PersonSpec {
+  name: string;
+  tier: RiskTier;
+  age: SeedUser['ageGroup'];
+  wifi: boolean;
+  pets?: boolean;
+  /** Fraction of the zone radius: < 1 inside, > 1 outside. */
+  dist: number;
+  bearing: number;
+  /** Minutes since last heartbeat (medium/high only). */
+  silentMin?: number;
+}
+
+const PEOPLE: Record<string, PersonSpec[]> = {
+  'dallas-earthquake': [
+    { name: 'Marcus T.', tier: 'none', age: '18-64', wifi: true, dist: 1.6, bearing: 200 },
+    { name: 'Jennifer L.', tier: 'none', age: '18-64', wifi: true, pets: true, dist: 1.8, bearing: 250 },
+    { name: 'Diego R.', tier: 'none', age: '18-64', wifi: false, dist: 2.0, bearing: 300 },
+    { name: 'Ashley W.', tier: 'none', age: '65+', wifi: true, dist: 2.2, bearing: 340 },
+    { name: 'Brandon K.', tier: 'medium', age: '18-64', wifi: true, pets: true, dist: 0.3, bearing: 190, silentMin: 34 },
+    { name: 'Sofia M.', tier: 'medium', age: '18-64', wifi: false, dist: 0.5, bearing: 240, silentMin: 52 },
+    { name: 'Tyler H.', tier: 'medium', age: '18-64', wifi: true, dist: 0.7, bearing: 290, silentMin: 68 },
+    { name: 'Dorothy P.', tier: 'high', age: '65+', wifi: true, dist: 0.4, bearing: 215, silentMin: 112 },
+    { name: 'Luis G.', tier: 'high', age: '65+', wifi: false, pets: true, dist: 0.6, bearing: 265, silentMin: 96 },
+    { name: 'Keisha J.', tier: 'high', age: '18-64', wifi: false, dist: 0.8, bearing: 320, silentMin: 104 },
+  ],
+  'la-fire': [
+    { name: 'Kevin N.', tier: 'none', age: '18-64', wifi: true, pets: true, dist: 1.6, bearing: 190 },
+    { name: 'Emily C.', tier: 'none', age: '18-64', wifi: true, dist: 1.8, bearing: 235 },
+    { name: 'Jorge V.', tier: 'none', age: '65+', wifi: false, dist: 2.0, bearing: 280 },
+    { name: 'Hannah S.', tier: 'none', age: '18-64', wifi: true, dist: 1.6, bearing: 330 },
+    { name: 'Ryan O.', tier: 'medium', age: '18-64', wifi: false, dist: 0.4, bearing: 200, silentMin: 41 },
+    { name: 'Mei L.', tier: 'medium', age: '18-64', wifi: true, pets: true, dist: 0.6, bearing: 255, silentMin: 58 },
+    { name: 'Andre B.', tier: 'medium', age: '18-64', wifi: true, dist: 0.3, bearing: 305, silentMin: 31 },
+    { name: 'Ruth A.', tier: 'high', age: '65+', wifi: false, pets: true, dist: 0.5, bearing: 225, silentMin: 118 },
+    { name: 'Carlos D.', tier: 'high', age: '65+', wifi: true, dist: 0.7, bearing: 275, silentMin: 91 },
+    { name: 'Linh T.', tier: 'high', age: '18-64', wifi: true, dist: 0.35, bearing: 340, silentMin: 107 },
+  ],
+  'miami-flood': [
+    { name: 'Gabriela F.', tier: 'none', age: '18-64', wifi: true, dist: 1.6, bearing: 210 },
+    { name: 'Michael R.', tier: 'none', age: '18-64', wifi: false, pets: true, dist: 1.8, bearing: 255 },
+    { name: 'Yolanda P.', tier: 'none', age: '65+', wifi: true, dist: 1.6, bearing: 290 },
+    { name: 'Ethan B.', tier: 'none', age: '18-64', wifi: true, dist: 2.0, bearing: 325 },
+    { name: 'Isabella C.', tier: 'medium', age: '18-64', wifi: true, dist: 0.5, bearing: 205, silentMin: 47 },
+    { name: 'Darnell W.', tier: 'medium', age: '18-64', wifi: false, pets: true, dist: 0.7, bearing: 250, silentMin: 63 },
+    { name: 'Camila R.', tier: 'medium', age: '18-64', wifi: true, dist: 0.4, bearing: 300, silentMin: 38 },
+    { name: 'Harold S.', tier: 'high', age: '65+', wifi: true, dist: 0.6, bearing: 230, silentMin: 99 },
+    { name: 'Mariela H.', tier: 'high', age: '18-64', wifi: false, pets: true, dist: 0.3, bearing: 280, silentMin: 115 },
+    { name: 'Jean-Pierre L.', tier: 'high', age: '65+', wifi: false, dist: 0.8, bearing: 315, silentMin: 93 },
+  ],
 };
 
-const FIRST = [
-  'Ava', 'Ben', 'Carla', 'Dev', 'Elena', 'Femi', 'Grace', 'Hector', 'Ines', 'Jamal', 'Kira', 'Luis',
-  'Mina', 'Noah', 'Omar', 'Priya', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Wes', 'Ximena',
-  'Yusuf', 'Zoe', 'Ana', 'Bao', 'Chidi', 'Dana',
-];
-const LAST_INITIAL = 'ABCDEFGHJKLMNPRSTVWZ';
+interface PlaceSpec {
+  km: number;
+  bearing: number;
+}
 
-const CENTERS: SeedCenter[] = [
-  { id: 1, type: 'fire', name: 'Levee Street Fire Station 12 (synthetic)', lat: 32.7841, lng: -96.8233 },
-  { id: 2, type: 'fire', name: 'Cedar Bend Fire Station 4 (synthetic)', lat: 32.7512, lng: -96.8451 },
-  { id: 3, type: 'fire', name: 'Northgate Fire Station 31 (synthetic)', lat: 32.8065, lng: -96.8619 },
-  { id: 4, type: 'police', name: 'Riverside Police Substation (synthetic)', lat: 32.7629, lng: -96.8070 },
-  { id: 5, type: 'police', name: 'West Mesa Police Post (synthetic)', lat: 32.7473, lng: -96.8812 },
-  { id: 6, type: 'hospital', name: 'Bluebonnet General Hospital (synthetic)', lat: 32.8012, lng: -96.8105 },
-  { id: 7, type: 'hospital', name: 'Oak Hollow Medical Center (synthetic)', lat: 32.7348, lng: -96.8194 },
-  { id: 8, type: 'police', name: 'Elm Fork Police Station (synthetic)', lat: 32.7918, lng: -96.8487 },
-];
+const CENTER_SPECS: Record<string, Array<{ type: SeedCenter['type']; name: string } & PlaceSpec>> = {
+  'dallas-earthquake': [
+    { type: 'police', name: 'Dallas Central Patrol Station (synthetic)', km: 2.5, bearing: 200 },
+    { type: 'fire', name: 'Dallas Fire Station 18 (synthetic)', km: 3.5, bearing: 280 },
+    { type: 'hospital', name: 'Trinity Medical Center (synthetic)', km: 4.0, bearing: 330 },
+  ],
+  'la-fire': [
+    { type: 'police', name: 'LA Central Community Police Station (synthetic)', km: 2.0, bearing: 190 },
+    { type: 'fire', name: 'LA Fire Station 9 (synthetic)', km: 3.0, bearing: 260 },
+    { type: 'hospital', name: 'Echo Park General Hospital (synthetic)', km: 3.5, bearing: 320 },
+  ],
+  'miami-flood': [
+    { type: 'police', name: 'Little Havana Police District (synthetic)', km: 2.0, bearing: 240 },
+    { type: 'fire', name: 'Miami Fire Station 5 (synthetic)', km: 2.5, bearing: 290 },
+    { type: 'hospital', name: 'Biscayne Regional Hospital (synthetic)', km: 3.0, bearing: 330 },
+  ],
+};
 
-const HOSTS = [
-  'Grace Fellowship Hall', 'The Okafor family', 'Lakewood Rec Center', 'M. Delgado', 'Hilltop Community Church',
-  'The Nguyen household', 'Cedar Ridge Middle School gym', 'R. Patel', 'Unity Mosque community room',
-  'Elm Street Apartments clubhouse', 'The Johnson family', 'Oak Cliff Scout Lodge', 'S. Ramirez',
-  'Temple Beth Shalom annex', 'Northside YMCA',
-];
+const SHELTER_SPECS: Record<string, Array<Omit<SeedShelter, 'lat' | 'lng'> & PlaceSpec>> = {
+  'dallas-earthquake': [
+    { hostName: 'Fair Park Community Center', capacity: 6, acceptsPets: false, accessible: true, km: 10, bearing: 120 },
+    { hostName: 'The Okafor family', capacity: 3, acceptsPets: true, accessible: false, km: 11, bearing: 200 },
+    { hostName: 'Oak Lawn United Methodist Church', capacity: 5, acceptsPets: true, accessible: true, km: 9, bearing: 330 },
+    { hostName: 'M. Delgado', capacity: 2, acceptsPets: true, accessible: false, km: 12, bearing: 260 },
+  ],
+  'la-fire': [
+    { hostName: 'Pasadena Rec Center', capacity: 6, acceptsPets: true, accessible: true, km: 12, bearing: 40 },
+    { hostName: 'The Nguyen household', capacity: 3, acceptsPets: false, accessible: true, km: 9, bearing: 180 },
+    { hostName: 'Culver City Masonic Hall', capacity: 4, acceptsPets: true, accessible: false, km: 13, bearing: 240 },
+    { hostName: 'R. Patel', capacity: 2, acceptsPets: true, accessible: true, km: 10, bearing: 140 },
+  ],
+  'miami-flood': [
+    { hostName: 'Coral Gables Youth Center', capacity: 6, acceptsPets: false, accessible: true, km: 9, bearing: 220 },
+    { hostName: 'The Johnson family', capacity: 3, acceptsPets: true, accessible: false, km: 10, bearing: 280 },
+    { hostName: 'Hialeah Community Church', capacity: 5, acceptsPets: true, accessible: true, km: 12, bearing: 310 },
+    { hostName: 'S. Ramirez', capacity: 2, acceptsPets: true, accessible: true, km: 8, bearing: 250 },
+  ],
+};
 
 const NEWS: SeedNews[] = [
-  { area: DEMO_ZONE.id, minutesAgo: 95, text: 'SYNTHETIC: Trinity Bottoms residents report water over curbs on Levee St after 4 inches of rain in two hours.' },
-  { area: DEMO_ZONE.id, minutesAgo: 70, text: 'SYNTHETIC: County officials close three low-water crossings near the Trinity Bottoms; several cars stalled.' },
-  { area: DEMO_ZONE.id, minutesAgo: 48, text: 'SYNTHETIC: Power outage affects about 6,000 customers in the flood area; cell towers on backup power.' },
-  { area: DEMO_ZONE.id, minutesAgo: 30, text: 'SYNTHETIC: River gauge at Commerce St bridge rising fast, forecast to crest 2 ft above flood stage tonight.' },
-  { area: DEMO_ZONE.id, minutesAgo: 12, text: 'SYNTHETIC: Swift-water rescue teams staged at Cedar Bend; officials urge residents to move to higher ground.' },
+  { area: 'dallas-earthquake', minutesAgo: 120, text: 'SYNTHETIC: Magnitude 5.8 earthquake centered near downtown Dallas; shaking felt across the Metroplex.' },
+  { area: 'dallas-earthquake', minutesAgo: 95, text: 'SYNTHETIC: Facades collapse on older brick buildings in Deep Ellum; several streets closed.' },
+  { area: 'dallas-earthquake', minutesAgo: 70, text: 'SYNTHETIC: About 40,000 customers without power; cell service congested citywide.' },
+  { area: 'dallas-earthquake', minutesAgo: 40, text: 'SYNTHETIC: Magnitude 4.1 aftershock; crews inspect I-30 and I-35E overpasses.' },
+  { area: 'dallas-earthquake', minutesAgo: 15, text: 'SYNTHETIC: Fire-Rescue asks residents to check on elderly neighbors and report trapped people.' },
+  { area: 'la-fire', minutesAgo: 110, text: 'SYNTHETIC: Brush fire ignites in Elysian Park and spreads toward Echo Park on strong Santa Ana winds.' },
+  { area: 'la-fire', minutesAgo: 85, text: 'SYNTHETIC: Mandatory evacuation ordered north of the 101 between Echo Park and Silver Lake.' },
+  { area: 'la-fire', minutesAgo: 60, text: 'SYNTHETIC: Fire grows to 2,400 acres with 0% containment; smoke closes parts of the 5 and 110.' },
+  { area: 'la-fire', minutesAgo: 35, text: 'SYNTHETIC: Utility cuts power to 25,000 customers to reduce ignition risk; some cell towers offline.' },
+  { area: 'la-fire', minutesAgo: 10, text: 'SYNTHETIC: Firefighters going door to door; residents with limited mobility urged to call 911.' },
+  { area: 'miami-flood', minutesAgo: 115, text: 'SYNTHETIC: Over 12 inches of rain in six hours floods Little Havana and the Miami River corridor.' },
+  { area: 'miami-flood', minutesAgo: 90, text: 'SYNTHETIC: King tide pushes Biscayne Bay over seawalls in Brickell; several roads impassable.' },
+  { area: 'miami-flood', minutesAgo: 65, text: 'SYNTHETIC: 55,000 outages in Miami-Dade; flooded substations delay restoration.' },
+  { area: 'miami-flood', minutesAgo: 30, text: 'SYNTHETIC: Water rescues underway on SW 8th St; residents told not to drive through standing water.' },
+  { area: 'miami-flood', minutesAgo: 8, text: 'SYNTHETIC: Emergency shelters open; officials ask families to check on older relatives.' },
 ];
 
 export function buildSeedDataset(seed = SEED): SeedDataset {
   const rand = prng(seed);
-  const pick = <T>(arr: readonly T[]) => arr[Math.floor(rand() * arr.length)];
-
   const users: SeedUser[] = [];
-  for (let i = 0; i < 200; i++) {
-    // 160 inside the zone, 40 in a ring just outside it.
-    const inside = i < 160;
-    const km = inside
-      ? DEMO_ZONE.radiusKm * Math.sqrt(rand()) * 0.95
-      : DEMO_ZONE.radiusKm * (1.1 + rand() * 1.0);
-    const p = offset(DEMO_ZONE.centerLat, DEMO_ZONE.centerLng, km, rand() * Math.PI * 2);
+  const centers: SeedCenter[] = [];
+  const shelters: SeedShelter[] = [];
 
-    const ageRoll = rand();
-    const ageGroup: SeedUser['ageGroup'] = ageRoll < 0.1 ? '0-17' : ageRoll < 0.75 ? '18-64' : '65+';
-    const vulnerabilityFlag = ageGroup === '65+' ? rand() < 0.5 : rand() < 0.12;
-    const hasPets = rand() < 0.3;
-
-    // ~18% stale heartbeats (15–150 min old), the rest fresh (< 2 min old).
-    const silent = rand() < 0.18;
-    const minutesAgo = silent ? 15 + rand() * 135 : rand() * 1.5;
-
-    users.push({
-      index: i,
-      displayName: `${pick(FIRST)} ${LAST_INITIAL[Math.floor(rand() * LAST_INITIAL.length)]}. #${String(i + 1).padStart(3, '0')}`,
-      ageGroup,
-      vulnerabilityFlag,
-      hasPets,
-      lat: r6(p.lat),
-      lng: r6(p.lng),
-      accuracy: Math.round(5 + rand() * 45),
-      minutesAgo: Math.round(minutesAgo * 10) / 10,
-      silent,
-    });
+  for (const z of ZONES) {
+    for (const s of PEOPLE[z.id]) {
+      const p = offset(z.centerLat, z.centerLng, s.dist * z.radiusKm, s.bearing);
+      const silent = s.tier !== 'none';
+      users.push({
+        index: users.length,
+        displayName: s.name,
+        ageGroup: s.age,
+        zoneId: z.id,
+        riskTier: s.tier,
+        vulnerabilityFlag: s.tier === 'high',
+        hasPets: s.pets ?? false,
+        hasWifi: s.wifi,
+        lat: p.lat,
+        lng: p.lng,
+        accuracy: Math.round(5 + rand() * 30),
+        minutesAgo: silent ? s.silentMin! : Math.round(rand() * 15) / 10,
+        silent,
+      });
+    }
+    for (const c of CENTER_SPECS[z.id]) {
+      centers.push({ id: centers.length + 1, type: c.type, name: c.name, ...offset(z.centerLat, z.centerLng, c.km, c.bearing) });
+    }
+    for (const { km, bearing, ...s } of SHELTER_SPECS[z.id]) {
+      shelters.push({ ...s, hostName: `${s.hostName} (synthetic)`, ...offset(z.centerLat, z.centerLng, km, bearing) });
+    }
   }
 
-  const shelters: SeedShelter[] = HOSTS.map(hostName => {
-    const p = offset(DEMO_ZONE.centerLat, DEMO_ZONE.centerLng, 3 + rand() * 12, rand() * Math.PI * 2);
-    return {
-      hostName: `${hostName} (synthetic)`,
-      lat: r6(p.lat),
-      lng: r6(p.lng),
-      capacity: 1 + Math.floor(rand() * 8),
-      acceptsPets: rand() < 0.45,
-      accessible: rand() < 0.55,
-    };
-  });
-
-  return { zone: { ...DEMO_ZONE }, users, centers: CENTERS.map(c => ({ ...c })), shelters, news: NEWS.map(n => ({ ...n })) };
+  return { zones: ZONES.map(z => ({ ...z })), users, centers, shelters, news: NEWS.map(n => ({ ...n })) };
 }
 
 /** Synthetic identities live in a recognisable range so they never collide with real ones in practice. */

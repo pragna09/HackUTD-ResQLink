@@ -14,6 +14,8 @@ export const userProfile = table(
     vulnerabilityFlag: t.bool(),
     /** Added to the brief's model: the shelter filter needs to know about pets. */
     hasPets: t.bool(),
+    /** Whether the person has Wi-Fi at home. Shown to responders; not part of the urgency score. */
+    hasWifi: t.bool(),
     optIn: t.bool(),
     isSynthetic: t.bool(),
     /** Synthetic users only: true = simulated phone has gone quiet, so the scan stops refreshing its ping. */

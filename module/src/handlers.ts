@@ -41,6 +41,8 @@ export function updateProfile(
     ageGroup: a.ageGroup,
     vulnerabilityFlag: a.vulnerabilityFlag,
     hasPets: a.hasPets,
+    // The /app form does not ask about Wi-Fi yet; keep any existing value, default to true.
+    hasWifi: ctx.db.userProfile.identity.find(ctx.sender)?.hasWifi ?? true,
     optIn: a.optIn,
     isSynthetic: false,
     simSilent: false,
@@ -338,10 +340,9 @@ export function simulateDisaster(ctx: Ctx, a: { zoneId: string; severity: number
   const severity = Math.min(5, Math.max(1, Math.round(a.severity)));
   ctx.db.zone.id.update({
     ...z,
-    hazard: 'flood',
     severity,
     confidence: 1,
-    summary: `DEMO OVERRIDE: an operator simulated a severity ${severity} flood. This is not an agent assessment.`,
+    summary: `DEMO OVERRIDE: an operator simulated a severity ${severity} ${z.hazard}. This is not an agent assessment.`,
     evidence: ['Manual demo override from the dashboard (simulate_disaster).'],
     source: 'simulated',
     updatedAt: ctx.timestamp,
@@ -391,18 +392,18 @@ export function resetDemo(ctx: Ctx) {
 
 export function loadSeed(ctx: Ctx) {
   const data = buildSeedDataset();
-  const z = data.zone;
-  ctx.db.zone.insert({
-    ...z,
-    hazard: 'none',
-    severity: 1,
-    confidence: 0,
-    summary: 'Not assessed yet. Run weather research or simulate a disaster.',
-    evidence: [],
-    source: 'seed',
-    updatedAt: ctx.timestamp,
-    researchStatus: 'idle',
-  });
+  for (const { city: _city, ...z } of data.zones) {
+    ctx.db.zone.insert({
+      ...z,
+      severity: 1,
+      confidence: 0,
+      summary: 'Not assessed yet. Run weather research or simulate a disaster.',
+      evidence: [],
+      source: 'seed',
+      updatedAt: ctx.timestamp,
+      researchStatus: 'idle',
+    });
+  }
   for (const n of data.news) {
     ctx.db.newsItem.insert({ id: 0n, area: n.area, text: n.text, timestamp: minutesAgo(ctx, n.minutesAgo), isSynthetic: true });
   }
@@ -418,6 +419,7 @@ export function loadSeed(ctx: Ctx) {
       ageGroup: u.ageGroup,
       vulnerabilityFlag: u.vulnerabilityFlag,
       hasPets: u.hasPets,
+      hasWifi: u.hasWifi,
       optIn: true,
       isSynthetic: true,
       simSilent: u.silent,

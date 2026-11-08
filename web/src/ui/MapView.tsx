@@ -6,6 +6,8 @@ import { severityColor, urgencyColor } from './format';
 
 interface Props {
   zones: Zone[];
+  /** Zone the map frames. Re-fits whenever this changes. */
+  focusZone?: Zone;
   cases: Case[];
   pings: Ping[];
   centers: Center[];
@@ -18,7 +20,7 @@ const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 /** Plain Leaflet inside React: the map is created once; each layer group is redrawn when its data changes. */
-export function MapView({ zones, cases, pings, centers, offers, selectedId, onSelect }: Props) {
+export function MapView({ zones, focusZone, cases, pings, centers, offers, selectedId, onSelect }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layers = useRef<Record<string, L.LayerGroup>>({});
@@ -40,14 +42,14 @@ export function MapView({ zones, cases, pings, centers, offers, selectedId, onSe
     };
   }, []);
 
-  // Fit to the first zone once it arrives.
-  const fitted = useRef(false);
+  // Frame the focused zone, with room for the no-risk people just outside it, whenever it changes.
+  const focusId = focusZone?.id;
   useEffect(() => {
-    const z = zones[0];
-    if (!map.current || !z || fitted.current) return;
-    fitted.current = true;
-    map.current.fitBounds(L.latLng(z.centerLat, z.centerLng).toBounds(z.radiusKm * 2000 * 1.6));
-  }, [zones]);
+    const z = focusZone;
+    if (!map.current || !z) return;
+    map.current.fitBounds(L.latLng(z.centerLat, z.centerLng).toBounds(z.radiusKm * 2000 * 2.6));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only refit when the focused zone changes
+  }, [focusId]);
 
   useEffect(() => {
     const g = layers.current.zones;

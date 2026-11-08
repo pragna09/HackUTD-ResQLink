@@ -37,6 +37,7 @@ function readSnapshot(conn: any): Snapshot {
       ageGroup: r.ageGroup,
       vulnerabilityFlag: r.vulnerabilityFlag,
       hasPets: r.hasPets,
+      hasWifi: r.hasWifi,
       optIn: r.optIn,
       isSynthetic: r.isSynthetic,
       simSilent: r.simSilent,

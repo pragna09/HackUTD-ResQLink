@@ -21,9 +21,8 @@ const minAgo = (m: number) => new Date(Date.now() - m * 60_000);
 function seed(): Snapshot {
   const d = buildSeedDataset();
   const s = emptySnapshot();
-  s.zones.push({
-    ...d.zone,
-    hazard: 'none',
+  for (const { city: _city, ...z } of d.zones) s.zones.push({
+    ...z,
     severity: 1,
     confidence: 0,
     summary: 'Not assessed yet. Run weather research or simulate a disaster.',
@@ -37,7 +36,7 @@ function seed(): Snapshot {
   d.shelters.forEach((o, i) => s.offers.push({ ...o, id: String(i + 1), owner: 'seed', status: 'open', isSynthetic: true }));
   d.users.forEach(u => {
     const id = `synthetic-${u.index}`;
-    s.profiles.set(id, { identity: id, displayName: u.displayName, ageGroup: u.ageGroup, vulnerabilityFlag: u.vulnerabilityFlag, hasPets: u.hasPets, optIn: true, isSynthetic: true, simSilent: u.silent });
+    s.profiles.set(id, { identity: id, displayName: u.displayName, ageGroup: u.ageGroup, vulnerabilityFlag: u.vulnerabilityFlag, hasPets: u.hasPets, hasWifi: u.hasWifi, optIn: true, isSynthetic: true, simSilent: u.silent });
     s.pings.set(id, { user: id, lat: u.lat, lng: u.lng, accuracy: u.accuracy, at: minAgo(u.minutesAgo) });
   });
   return s;
@@ -129,7 +128,7 @@ export function createMockBackend(): Backend {
 
   const api: Api = {
     async updateProfile(a) {
-      data.profiles.set(ME, { identity: ME, ...a, isSynthetic: false, simSilent: false });
+      data.profiles.set(ME, { identity: ME, ...a, hasWifi: data.profiles.get(ME)?.hasWifi ?? true, isSynthetic: false, simSilent: false });
       if (!a.optIn) data.pings.delete(ME);
       emit();
     },
@@ -144,16 +143,17 @@ export function createMockBackend(): Backend {
       emit();
       await new Promise(r => setTimeout(r, 1200));
       Object.assign(z, {
-        hazard: 'flood', severity: 4, confidence: 0.6, source: 'fallback', researchStatus: 'idle', updatedAt: new Date(),
-        summary: 'Synthetic reports describe street flooding, closed low-water crossings and a river gauge forecast above flood stage. Power and cell service are degraded, so silent phones are expected and need welfare checks.',
+        severity: 4, confidence: 0.6, source: 'fallback', researchStatus: 'idle', updatedAt: new Date(),
+        summary: `Synthetic reports describe a serious ${z.hazard} with damage, outages and degraded cell service, so silent phones are expected and need welfare checks.`,
         evidence: data.news.filter(n => n.area === zoneId).map(n => n.text.replace(/^SYNTHETIC:\s*/, '')),
       });
       scan();
     },
     async simulateDisaster(zoneId, severity) {
-      Object.assign(zone(zoneId), {
-        hazard: 'flood', severity, confidence: 1, source: 'simulated', updatedAt: new Date(),
-        summary: `DEMO OVERRIDE: an operator simulated a severity ${severity} flood. This is not an agent assessment.`,
+      const z = zone(zoneId);
+      Object.assign(z, {
+        severity, confidence: 1, source: 'simulated', updatedAt: new Date(),
+        summary: `DEMO OVERRIDE: an operator simulated a severity ${severity} ${z.hazard}. This is not an agent assessment.`,
         evidence: ['Manual demo override from the dashboard (simulate_disaster).'],
       });
       scan();

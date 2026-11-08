@@ -12,7 +12,8 @@ import { runWeatherResearch } from './weather';
 import type { CaseRow, OfferRow } from './types';
 
 const data = buildSeedDataset();
-const zone = data.zone;
+const news = data.news.filter(n => n.area === data.zones[0].id);
+const zone = data.zones[0];
 const client = llm();
 console.log(`provider=${client.adapter.name} model=${client.adapter.model} available=${client.adapter.available}\n`);
 
@@ -21,11 +22,11 @@ const nws: NwsResult = process.argv.includes('--no-nws')
   ? { ok: false, alerts: [], error: 'skipped (--no-nws)' }
   : await fetchActiveAlerts(zone.centerLat, zone.centerLng);
 console.log(`NWS: ok=${nws.ok} alerts=${nws.alerts.length}${nws.error ? ` error=${nws.error}` : ''}`);
-const weather = await runWeatherResearch({ zone, news: data.news, nwsAlerts: nws.alerts, nwsError: nws.error });
+const weather = await runWeatherResearch({ zone, news, nwsAlerts: nws.alerts, nwsError: nws.error });
 console.log('WEATHER', JSON.stringify({ source: weather.source, note: weather.note, ...weather.data }, null, 2), '\n');
 
 // 2. Triage on three synthetic silent users
-const silent = data.users.filter(u => u.silent).slice(0, 3);
+const silent = data.users.filter(u => u.silent && u.zoneId === zone.id).slice(0, 3);
 const cases: CaseRow[] = silent.map((u, i) => {
   const s = urgencyScore({ severity: weather.data.severity, silentMinutes: u.minutesAgo, vulnerable: u.vulnerabilityFlag });
   return {

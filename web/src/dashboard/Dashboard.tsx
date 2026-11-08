@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { URGENCY_WEIGHTS, SILENCE_CAP_MIN, SILENCE_THRESHOLD_MIN, MIN_SEVERITY_FOR_SCAN } from '../../../module/src/logic';
+import { DEMO_ZONE, ZONES } from '../../../module/src/seed_data';
 import { useApi, useLive } from '../stdb/store';
-import type { Alert, Case, Center, Offer, Zone } from '../stdb/types';
+import type { Alert, Case, Center, Offer, Profile, Zone } from '../stdb/types';
 import { SourceBadge, Toast, TopBar } from '../ui/Chrome';
 import { MapView } from '../ui/MapView';
 import { ago, minutesLabel, severityColor, urgencyColor } from '../ui/format';
@@ -15,16 +16,27 @@ export function Dashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
 
-  const zone: Zone | undefined = data.zones[0];
+  // The dashboard shows one scenario at a time; "Simulate disaster" switches to the chosen zone.
+  const [zoneId, setZoneId] = useState<string>(DEMO_ZONE.id);
+  const zone: Zone | undefined = data.zones.find(z => z.id === zoneId) ?? data.zones[0];
+  const zoneCases = useMemo(() => data.cases.filter(c => c.zoneId === zone?.id), [data.cases, zone?.id]);
   const active = useMemo(
-    () => data.cases.filter(c => c.status !== 'resolved').sort((a, b) => b.urgencyScore - a.urgencyScore),
-    [data.cases]
+    () => zoneCases.filter(c => c.status !== 'resolved').sort((a, b) => b.urgencyScore - a.urgencyScore),
+    [zoneCases]
   );
-  const resolved = useMemo(() => data.cases.filter(c => c.status === 'resolved'), [data.cases]);
+  const resolved = useMemo(() => zoneCases.filter(c => c.status === 'resolved'), [zoneCases]);
+  const zoneAlerts = useMemo(() => {
+    const ids = new Set(zoneCases.map(c => c.id));
+    return data.alerts.filter(a => ids.has(a.caseId));
+  }, [data.alerts, zoneCases]);
+  const showZone = (id: string) => {
+    setZoneId(id);
+    setSelectedId(null);
+  };
   const listed = showResolved ? resolved : active;
   const pings = useMemo(() => [...data.pings.values()], [data.pings]);
   const alertsByCase = useMemo(() => new Map(data.alerts.map(a => [a.caseId, a])), [data.alerts]);
-  const selected = data.cases.find(c => c.id === selectedId) ?? null;
+  const selected = zoneCases.find(c => c.id === selectedId) ?? null;
 
   // Keep a sensible selection as the queue changes.
   useEffect(() => {
@@ -33,8 +45,8 @@ export function Dashboard() {
 
   const counters = {
     flagged: active.length,
-    alerted: data.alerts.length,
-    acknowledged: data.alerts.filter(a => a.status === 'acknowledged').length,
+    alerted: zoneAlerts.length,
+    acknowledged: zoneAlerts.filter(a => a.status === 'acknowledged').length,
     sheltered: active.filter(c => c.matchedOffer !== undefined).length,
   };
 
@@ -58,7 +70,7 @@ export function Dashboard() {
         <Counter cls="flag" n={offline ? null : counters.flagged} label="Flagged" loading={loading} />
         <Counter cls="alert" n={offline ? null : counters.alerted} label={`Alerted · ${counters.acknowledged} ack`} loading={loading} />
         <Counter cls="shelter" n={offline ? null : counters.sheltered} label="Shelter held" loading={loading} />
-        <DemoControls zone={zone} run={run} disabled={!zone} />
+        <DemoControls zone={zone} zones={data.zones} onShowZone={showZone} run={run} disabled={!zone} />
       </div>
 
       <main className="dash-main">
@@ -76,6 +88,7 @@ export function Dashboard() {
             loading={loading}
             offline={offline}
             zone={zone}
+            profiles={data.profiles}
             alertsByCase={alertsByCase}
             selectedId={selectedId}
             onSelect={setSelectedId}
@@ -86,6 +99,7 @@ export function Dashboard() {
         <section className="map-wrap" aria-label="Map">
           <MapView
             zones={data.zones}
+            focusZone={zone}
             cases={listed}
             pings={pings}
             centers={data.centers}
@@ -120,6 +134,7 @@ export function Dashboard() {
           <ZonePanel zone={zone} newsCount={data.news.filter(n => n.area === zone?.id).length} loading={loading} />
           <CaseDetail
             c={selected}
+            hasWifi={selected ? data.profiles.get(selected.user)?.hasWifi : undefined}
             alert={selected ? alertsByCase.get(selected.id) : undefined}
             center={data.centers.find(x => x.id === selected?.assignedCenter)}
             offer={data.offers.find(o => o.id === selected?.matchedOffer)}
@@ -153,9 +168,23 @@ function Counter({ n, label, cls, loading }: { n: number | null; label: string; 
   );
 }
 
-function DemoControls({ zone, run, disabled }: { zone?: Zone; run: (l: string, f: () => Promise<void>) => void; disabled: boolean }) {
+/** Severity the scenario dropdown sets. Scanning starts at MIN_SEVERITY_FOR_SCAN (3). */
+const SIMULATED_SEVERITY = 4;
+
+function DemoControls(props: {
+  zone?: Zone;
+  zones: Zone[];
+  onShowZone: (id: string) => void;
+  run: (l: string, f: () => Promise<void>) => void;
+  disabled: boolean;
+}) {
+  const { zone, zones, onShowZone, run, disabled } = props;
   const api = useApi();
-  const [sev, setSev] = useState(4);
+  // One entry per seeded scenario present in the database, in seed order (Dallas, LA, Miami).
+  const scenarios = ZONES.filter(s => zones.some(z => z.id === s.id)).map(s => ({
+    id: s.id,
+    label: `Simulate ${s.hazard} in ${s.city}`,
+  }));
   const [count, setCount] = useState(15);
   const researching = zone?.researchStatus === 'requested';
   return (
@@ -168,18 +197,27 @@ function DemoControls({ zone, run, disabled }: { zone?: Zone; run: (l: string, f
       >
         {researching ? 'Researching…' : 'Run weather research'}
       </button>
-      <span style={{ display: 'inline-flex', gap: 4 }}>
-        <select aria-label="Simulated severity" value={sev} onChange={e => setSev(Number(e.target.value))}>
-          {[3, 4, 5].map(s => (
-            <option key={s} value={s}>
-              sev {s}
-            </option>
-          ))}
-        </select>
-        <button className="btn" disabled={disabled} onClick={() => zone && run(`Simulated severity ${sev} flood`, () => api.simulateDisaster(zone.id, sev))}>
-          Simulate disaster
-        </button>
-      </span>
+      <select
+        className="simulate"
+        aria-label="Simulate disaster"
+        value=""
+        disabled={disabled || scenarios.length === 0}
+        onChange={e => {
+          const s = scenarios.find(x => x.id === e.target.value);
+          if (!s) return;
+          onShowZone(s.id);
+          run(s.label.replace('Simulate', 'Simulated'), () => api.simulateDisaster(s.id, SIMULATED_SEVERITY));
+        }}
+      >
+        <option value="" disabled hidden>
+          Simulate disaster ▾
+        </option>
+        {scenarios.map(s => (
+          <option key={s.id} value={s.id}>
+            {s.label}
+          </option>
+        ))}
+      </select>
       <span style={{ display: 'inline-flex', gap: 4 }}>
         <select aria-label="Users to silence" value={count} onChange={e => setCount(Number(e.target.value))}>
           {[5, 15, 30].map(s => (
@@ -209,6 +247,7 @@ function Queue(props: {
   loading: boolean;
   offline: boolean;
   zone?: Zone;
+  profiles: Map<string, Profile>;
   alertsByCase: Map<string, Alert>;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -252,6 +291,7 @@ function Queue(props: {
     <ol className="queue-list">
       {cases.map((c, i) => {
         const a = props.alertsByCase.get(c.id);
+        const wifi = props.profiles.get(c.user)?.hasWifi;
         const color = urgencyColor(c.urgencyScore);
         return (
           <li
@@ -274,6 +314,7 @@ function Queue(props: {
               <span className="mono">silent {minutesLabel(c.silentMinutes)}</span>
               {c.vulnerabilityFlag && <span className="chip warn">vulnerable</span>}
               {c.hasPets && <span className="chip">pets</span>}
+              {wifi !== undefined && <span className={`chip${wifi ? '' : ' warn'}`}>{wifi ? 'Wi-Fi' : 'no Wi-Fi'}</span>}
               {a && <span className={`chip ${a.status === 'acknowledged' ? 'ok' : 'info'}`}>{a.status === 'acknowledged' ? 'ack’d' : 'alert sent'}</span>}
               {c.matchedOffer !== undefined && <span className="chip ok">shelter held</span>}
             </span>
@@ -347,7 +388,8 @@ function ZonePanel({ zone, newsCount, loading }: { zone?: Zone; newsCount: numbe
   );
 }
 
-function CaseDetail({ c, alert, center, offer, onAck }: { c: Case | null; alert?: Alert; center?: Center; offer?: Offer; onAck: (id: string) => void }) {
+function CaseDetail(props: { c: Case | null; hasWifi?: boolean; alert?: Alert; center?: Center; offer?: Offer; onAck: (id: string) => void }) {
+  const { c, hasWifi, alert, center, offer, onAck } = props;
   if (!c)
     return (
       <section className="panel">
@@ -375,6 +417,11 @@ function CaseDetail({ c, alert, center, offer, onAck }: { c: Case | null; alert?
         <div className="muted small">
           Last heartbeat {ago(c.lastSeen)} · {c.lastLat.toFixed(4)}, {c.lastLng.toFixed(4)}
         </div>
+        {hasWifi !== undefined && (
+          <div className="small" style={{ marginTop: 6 }}>
+            <span className={`chip${hasWifi ? '' : ' warn'}`}>{hasWifi ? 'Has Wi-Fi at home' : 'No Wi-Fi at home'}</span>
+          </div>
+        )}
 
         <div className="section">
           <h3>Score breakdown</h3>

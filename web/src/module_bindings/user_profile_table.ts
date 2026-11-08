@@ -16,6 +16,7 @@ export default __t.row({
   ageGroup: __t.string().name("age_group"),
   vulnerabilityFlag: __t.bool().name("vulnerability_flag"),
   hasPets: __t.bool().name("has_pets"),
+  hasWifi: __t.bool().name("has_wifi"),
   optIn: __t.bool().name("opt_in"),
   isSynthetic: __t.bool().name("is_synthetic"),
   simSilent: __t.bool().name("sim_silent"),
